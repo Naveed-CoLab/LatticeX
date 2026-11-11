@@ -1,0 +1,50 @@
+# LatticeIQ settings. Change values here, never hard-code them in scripts.
+
+benchmark: SPY
+start_date: "2000-01-01"
+
+# Forecast horizons in trading days. main_horizon is the headline target.
+horizons: [5, 20, 60]
+main_horizon: 20
+
+# Final holdout: NOTHING on or after this date is used until the model freeze.
+holdout_start: "2025-01-01"
+
+# Walk-forward folds: train on everything before the test year (minus an embargo),
+# test on one calendar year, then move forward one year.
+folds:
+  first_test_year: 2012
+  last_test_year: 2024
+  embargo_days: 60        # trading days between last train date and first test date; must be >= max horizon
+
+# Evaluate every Nth trading day (weekly). Kronos/TimesFM will use the same grid,
+# so every model is scored on exactly the same dates.
+eval_step: 5
+
+# Model inputs
+features:
+  cross_sectional_rank: true   # rank each feature across stocks on each date (recommended)
+
+target_transform: winsor       # winsor (clip 1%/99% per date) or rank (cross-sectional rank)
+
+xgb:
+  n_estimators: 400
+  max_depth: 4
+  learning_rate: 0.03
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 50
+  reg_lambda: 5.0
+
+arima:
+  window: 500          # days of history each fit sees
+  max_p: 3
+  max_q: 3
+
+paths:
+  raw: data/raw
+  clean: data/clean
+  results: results
+
+news:
+  sentiment_model: ProsusAI/finbert   # non-commercial licence: FYP only, swap before selling

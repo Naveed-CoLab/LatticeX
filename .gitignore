@@ -1,0 +1,42 @@
+# ---- Secrets: never commit ----
+.env
+.env.*
+!.env.example
+kaggle.json
+**/kaggle.json
+Claude outputs/
+
+# ---- Data: too large and licensed (Tiingo, Benzinga) -> rebuild with scripts ----
+data/*
+!data/README.md
+*.parquet
+
+# ---- Trained models / checkpoints ----
+models/*
+!models/README.md
+*.pt
+*.safetensors
+*.ckpt
+mlruns/
+
+# ---- Experiment outputs: commit summaries only ----
+results/*.log
+results/pytest_*/
+results/2026110[678]_*/
+
+# ---- Design PDF: kept locally, not published (contains team names) ----
+/LatticeIQ System Design*.pdf
+docs/design/
+/test_keys.py
+
+# ---- Python / tools ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
