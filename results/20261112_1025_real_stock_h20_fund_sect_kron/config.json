@@ -1,0 +1,111 @@
+{
+  "source": "real",
+  "signal": "none",
+  "asset": "stock",
+  "horizon": 20,
+  "models": [
+    "random_walk",
+    "xgboost"
+  ],
+  "features": [
+    "ret_5",
+    "ret_20",
+    "ret_60",
+    "ret_120",
+    "ret_252",
+    "mom_12_1",
+    "xret_20",
+    "xret_60",
+    "vol_20",
+    "vol_60",
+    "vol_ratio",
+    "dist_ma50",
+    "dist_ma200",
+    "volume_z20",
+    "rsi_14",
+    "beta_60",
+    "idio_vol_60",
+    "f_earnings_yield",
+    "f_sales_yield",
+    "f_book_to_market",
+    "f_fcf_yield",
+    "f_roe",
+    "f_gross_prof",
+    "f_op_margin",
+    "f_accruals",
+    "f_leverage",
+    "f_rev_growth",
+    "f_asset_growth",
+    "f_sue",
+    "f_days_since_filing",
+    "f_size",
+    "f_filing_reaction",
+    "kronos_xret_5",
+    "kronos_xret_20",
+    "sec_mom_20",
+    "sec_mom_60",
+    "sr_ret_20",
+    "sr_ret_60",
+    "sr_mom_12_1",
+    "sr_vol_60",
+    "sr_dist_ma200",
+    "sr_f_earnings_yield",
+    "sr_f_book_to_market",
+    "sr_f_gross_prof",
+    "sr_f_rev_growth",
+    "sr_f_sue"
+  ],
+  "macro": false,
+  "news": false,
+  "fundamentals": true,
+  "sectors": true,
+  "kronos": true,
+  "objective": "regression",
+  "start_year": null,
+  "shrink": true,
+  "train_step": 1,
+  "n_tickers": 466,
+  "settings": {
+    "benchmark": "SPY",
+    "start_date": "2000-01-01",
+    "horizons": [
+      5,
+      20,
+      60
+    ],
+    "main_horizon": 20,
+    "holdout_start": "2025-01-01",
+    "folds": {
+      "first_test_year": 2012,
+      "last_test_year": 2024,
+      "embargo_days": 60
+    },
+    "eval_step": 5,
+    "features": {
+      "cross_sectional_rank": true
+    },
+    "target_transform": "winsor",
+    "xgb": {
+      "n_estimators": 400,
+      "max_depth": 4,
+      "learning_rate": 0.03,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "min_child_weight": 50,
+      "reg_lambda": 5.0
+    },
+    "arima": {
+      "window": 500,
+      "max_p": 3,
+      "max_q": 3
+    },
+    "paths": {
+      "raw": "data/raw",
+      "clean": "data/clean",
+      "results": "results"
+    },
+    "news": {
+      "sentiment_model": "ProsusAI/finbert"
+    }
+  }
+}

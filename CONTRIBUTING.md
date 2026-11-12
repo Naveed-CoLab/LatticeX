@@ -24,7 +24,7 @@ git push -u origin feature/timesfm       # open a pull request on GitHub
 Branch names: `feature/...`, `fix/...`, `exp/...` (experiments), `docs/...`.
 Commit messages: imperative, one line, e.g. `Add sector-relative features`.
 
-After any finished step, add a line to the work log in `docs/PROGRESS.md`.
+After any finished step, add a line to the work log in `docs/PROGRESS.md`. After any experiment, record the decision (IN / OUT / PENDING + reason) in `docs/decisions.md` and the numbers in `docs/results.md`.
 
 ## Reporting results
 

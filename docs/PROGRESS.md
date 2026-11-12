@@ -84,7 +84,9 @@ Daily automation (later): Windows Task Scheduler, weekdays ~2 pm PT → Tiingo +
 - [x] `kronos --timing` (v1): works, too slow + noisy → fixed
 - [x] `kronos --timing` v4 ✅: 4.6 forecasts/s per GPU × 2 → full 2010–2024 ≈ 1.6 GPU h
 - [x] `kronos --years 2010 2024` ✅: 59,699 forecasts, 189 dates, 1.74 GPU h
-- [ ] **Run** comparison: Random Walk vs XGBoost vs Kronos alone vs XGBoost + Kronos features
+- [x] Comparison ✅: Kronos alone IC 0.0087 (t 0.81); XGBoost + Kronos 0.0147 (t 1.83) vs 0.0140 → no reliable gain, Kronos not in final model
+- [x] TimesFM 2.5 zero-shot runner + features + tests ✅
+- [ ] **Run** `timesfm --timing`, then `timesfm --years 2010 2024`, then comparison with TimesFM
 - [ ] TimesFM 2.5 zero-shot (same pattern) → comparison row
 - [ ] FYP-2: fine-tune Kronos on US stocks 2000–2017 (our own US-only Kronos)
 - [ ] EDGAR fundamentals ingest (first-filed values, TTM) → fundamental features
@@ -145,6 +147,21 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 ---
 
 ## Work log (newest first)
+
+### 12 Nov 2026 (decision log)
+- New `docs/decisions.md`: every model, feature group, method and data choice with status IN / OUT / PENDING and the reason. Updated after each experiment from now on.
+
+### 12 Nov 2026 (Kronos results)
+- **Kronos alone:** hit 50.1%, rank IC 0.0087, t 0.81, positive 7/13 years; raw forecasts too large (RMSE 0.140 vs 0.074).
+- **XGBoost + Kronos features:** IC 0.0147 (t 1.83) vs 0.0140 (t 1.80) without: +0.0007, better in 6 years / worse in 5 → noise. Kronos features not in top features.
+- **Decision:** Kronos left out of the final FYP-1 model (no reliable gain + needs daily GPU). Kept for FYP-2 (ensemble / US fine-tune; it was strong in 2016 when XGBoost was weak).
+
+### 12 Nov 2026 (TimesFM)
+- Kronos comparison job was cancelled during the Kaggle outage → re-pushed (version 9), running.
+- **TimesFM 2.5 zero-shot runner** (`src/models/timesfm_runner.py`): weekly forecasts (same grid as evaluation), 512-day context, 5/20-day returns + 10th/90th percentile of the 20-day return. Not pretrained on stock prices → cleaner zero-shot test than Kronos. API checked offline (shapes); `--mock` mode for tests.
+- Features: `timesfm_xret_5`, `timesfm_xret_20` (excess vs SPY), `timesfm_unc_20` (its own 80% band width). `run_experiment --timesfm` (features) and model `timesfm` (standalone). `pretrained.py` now handles both models.
+- Tests 19 → 21: TimesFM features only use past forecasts; runner output unchanged when future prices are scrambled.
+- Next: `kaggle_cloud timesfm --timing`, then full run, then comparison.
 
 ### 11 Nov 2026 (README visuals)
 - README redesigned: banner (candlesticks + forecast cone, synthetic), app-structure diagram (data → features → models → daily forecast → dashboard/API), example forecast output, result charts (ablation, rank IC by year, bracket coverage) in light + dark versions in `docs/assets/`.

@@ -276,3 +276,52 @@ def test_kronos_features_use_only_past_forecasts(tmp_path, monkeypatch):
     one_after = d[d.get_loc(grid[1]) + 1]
     assert m.loc[(one_after, "BBB"), "kronos_xret_20"] == pytest.approx(-0.03)   # carried from grid[1], not grid[2]
     assert (m.index.get_level_values("date") >= grid[0]).all() or m.loc[d[d < grid[0]], "kronos_xret_20"].isna().all()
+
+
+def test_timesfm_features_use_only_past_forecasts(tmp_path, monkeypatch):
+    """TimesFM forecasts: excess vs SPY, uncertainty = q90 - q10, and never used before the day they were made."""
+    import src.features.pretrained as P
+    d = pd.bdate_range("2020-01-01", "2020-03-31")
+    grid = d[::5]
+    rows = []
+    for i, g in enumerate(grid):
+        for t, v in (("SPY", 0.01), ("AAA", 0.03 + i), ("BBB", -0.02)):
+            rows.append((g, t, 0.0, v, v - 0.05, v + 0.05))
+    k = pd.DataFrame(rows, columns=["date", "ticker", "timesfm_ret_5", "timesfm_ret_20", "timesfm_q10_20", "timesfm_q90_20"])
+    monkeypatch.setattr(P, "path", lambda key: tmp_path)
+    k.to_parquet(tmp_path / "timesfm_forecasts.parquet")
+    panel = pd.DataFrame([(x, t) for x in d for t in ("AAA", "BBB")], columns=["date", "ticker"])
+    m = P.timesfm_features(panel, cross_sectional_rank=False).set_index(["date", "ticker"])
+    assert m.loc[(grid[1], "AAA"), "timesfm_xret_20"] == pytest.approx(0.03 + 1 - 0.01)
+    assert m.loc[(grid[1], "AAA"), "timesfm_unc_20"] == pytest.approx(0.10)
+    day_before = d[d.get_loc(grid[2]) - 1]          # must still use grid[1]'s forecast, not grid[2]'s
+    assert m.loc[(day_before, "AAA"), "timesfm_raw_20"] == pytest.approx(0.03 + 1 - 0.01)
+
+
+def test_timesfm_runner_ignores_future_prices(tmp_path, monkeypatch):
+    """Scramble prices after a date: forecasts made on or before that date must not change (mock model, no GPU)."""
+    import src.models.timesfm_runner as R
+    px = make_prices(n_stocks=5, start="2012-01-01", end="2014-12-31", signal="none")
+    uni = pd.DataFrame({"ticker": [t for t in px["ticker"].unique() if t != "SPY"], "type": "stock",
+                        "start": pd.NaT, "end": pd.NaT})
+    monkeypatch.setattr(R, "load_universe", lambda: uni)
+    monkeypatch.setattr(R, "path", lambda key: tmp_path)
+
+    def forecasts(prices):
+        prices.to_parquet(tmp_path / "prices.parquet")
+        (tmp_path / "timesfm_forecasts.parquet").unlink(missing_ok=True)
+        R.run(years=(2013, 2014), mock=True, step=20)
+        return pd.read_parquet(tmp_path / "timesfm_forecasts.parquet").set_index(["date", "ticker"]).sort_index()
+
+    a = forecasts(px.copy())
+    cut = pd.Timestamp("2013-12-31")
+    b_px = px.copy()
+    late = b_px["date"] > cut
+    for c in ("open", "high", "low", "close", "adj_close"):
+        b_px.loc[late, c] *= np.random.default_rng(3).uniform(0.7, 1.3, late.sum())
+    b = forecasts(b_px)
+    early = a.index.get_level_values("date") <= cut
+    assert early.sum() > 50
+    pd.testing.assert_frame_equal(a[early], b.loc[a.index[early]])
+    assert not np.allclose(a[~early].values, b.loc[a.index[~early]].values)   # later ones did change
+    assert set(R.COLS) <= set(a.columns) and (a["timesfm_q90_20"] > a["timesfm_q10_20"]).all()

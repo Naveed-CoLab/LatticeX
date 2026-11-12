@@ -139,7 +139,7 @@ Walk-forward backtest: 466 S&P 500 stocks, test years 2012–2024, scored weekly
   <img alt="80% range coverage by year for LatticeIQ vs a naive normal model" src="docs/assets/bracket_coverage_light.png" width="100%">
 </picture>
 
-A rank IC of 0.01–0.05 is typical for honest stock forecasting. Full tables, 5- and 60-day results and limitations: [`docs/results.md`](docs/results.md).
+A rank IC of 0.01–0.05 is typical for honest stock forecasting. Full tables, 5- and 60-day results and limitations: [`docs/results.md`](docs/results.md). What was kept or dropped and why: [`docs/decisions.md`](docs/decisions.md).
 
 ## Quick start
 
@@ -190,6 +190,7 @@ LatticeX/
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | How the pipeline fits together, leakage rules |
 | [`docs/data-sources.md`](docs/data-sources.md) | Every data source, licence, point-in-time handling, known gaps |
+| [`docs/decisions.md`](docs/decisions.md) | **Which models and features are in or out, and why** |
 | [`docs/results.md`](docs/results.md) | All results tables and limitations |
 | [`docs/kaggle-workflow.md`](docs/kaggle-workflow.md) | Running jobs on Kaggle GPUs from a PC |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | What is done, TODO, decisions, work log |

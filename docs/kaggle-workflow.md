@@ -33,6 +33,8 @@ sequenceDiagram
 | `brackets "<flags>"` | `scripts.run_brackets` | ~20 min each |
 | `kronos --timing` | Kronos speed test | ~10 min |
 | `kronos --years 2010 2024` | Kronos forecasts, both GPUs | ~1.7 h |
+| `timesfm --timing` | TimesFM speed test | ~5 min |
+| `timesfm --years 2010 2024` | TimesFM weekly forecasts with quantiles | estimated by the timing run |
 | `fundamentals-download` | SEC EDGAR download | CPU |
 | `news-download --start 2015-01 --end 2019-12` | Benzinga download | CPU |
 | `status <job>` / `download <job>` | Check / fetch a job | — |

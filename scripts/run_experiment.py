@@ -30,7 +30,7 @@ from src.data.synthetic import make_prices
 from src.eval.metrics import diebold_mariano, summarize
 from src.features.fundamentals import FUND_FEATURES, fundamental_features
 from src.features.macro import MACRO_FEATURES, macro_features
-from src.features.pretrained import KRONOS_FEATURES, kronos_features
+from src.features.pretrained import FEATURES as PRETRAINED_FEATURES, pretrained_features
 from src.features.sector import SECTOR_FEATURES, sector_features
 from src.features.news import NEWS_FEATURES, news_features
 from src.features.price import FEATURES as PRICE_FEATURES, price_features
@@ -52,7 +52,8 @@ def load_prices(source: str, signal: str, n_stocks: int, benchmark: str = "SPY",
 
 def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
                 use_news: bool = False, use_fund: bool = False, use_sectors: bool = False,
-                use_kronos: bool = False, kronos_model: bool = False) -> tuple[pd.DataFrame, list]:
+                use_kronos: bool = False, kronos_model: bool = False,
+                use_timesfm: bool = False, timesfm_model: bool = False) -> tuple[pd.DataFrame, list]:
     universe = load_universe() if source == "real" else None
     groups = asset_types(universe) if universe is not None else None
     feats = price_features(prices, s["benchmark"], s["features"]["cross_sectional_rank"], groups)
@@ -82,12 +83,13 @@ def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
                                     prices_adj=prices)
         panel = panel.merge(fund, on=["date", "ticker"], how="left")
         feature_cols += FUND_FEATURES
-    if (use_kronos or kronos_model) and source == "real":
-        kf = kronos_features(panel.loc[panel["asset"] == "stock", ["date", "ticker"]], s["benchmark"],
-                             s["features"]["cross_sectional_rank"])
-        panel = panel.merge(kf, on=["date", "ticker"], how="left")
-        if use_kronos:
-            feature_cols += KRONOS_FEATURES
+    for name, as_feat, as_model in (("kronos", use_kronos, kronos_model), ("timesfm", use_timesfm, timesfm_model)):
+        if (as_feat or as_model) and source == "real":
+            pf = pretrained_features(name, panel.loc[panel["asset"] == "stock", ["date", "ticker"]], s["benchmark"],
+                                     s["features"]["cross_sectional_rank"])
+            panel = panel.merge(pf, on=["date", "ticker"], how="left")
+            if as_feat:
+                feature_cols += PRETRAINED_FEATURES[name]
     if use_sectors:
         sf = sector_features(panel, prices, s["benchmark"])
         if sf["date"].nunique() == 0:
@@ -139,7 +141,7 @@ def fit_xgb_shrunk(train: pd.DataFrame, y_col: str, feats: list, s: dict,
 def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), horizon=None,
         n_stocks=60, train_step=1, name=None, verbose=True, asset="stock", use_macro=False,
         shrink=True, use_news=False, start_year=None, use_fund=False, use_sectors=False,
-        objective="regression", use_kronos=False) -> dict:
+        objective="regression", use_kronos=False, use_timesfm=False) -> dict:
     s = load_settings()
     h = horizon or s["main_horizon"]
     y, end_col = f"y_{h}", f"target_end_{h}"
@@ -147,7 +149,8 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
 
     prices = load_prices(source, signal, n_stocks, s["benchmark"], verbose)
     panel, feats = build_panel(prices, s, source, use_macro, use_news, use_fund, use_sectors,
-                               use_kronos, kronos_model="kronos" in models)
+                               use_kronos, kronos_model="kronos" in models,
+                               use_timesfm=use_timesfm, timesfm_model="timesfm" in models)
     panel = panel[panel["asset"] == asset].reset_index(drop=True)
     if panel.empty:
         raise SystemExit(f"No rows for asset type '{asset}'. Check the 'type' column in config/universe.csv.")
@@ -187,9 +190,9 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
                 pred = k * raw
                 importances.append(model.importance().rename(f.year))
                 shrinks.append({"fold": f.year, "k": k})
-            elif m == "kronos":
-                # zero-shot Kronos used directly: its excess-return forecast IS the prediction (no training)
-                pred = test["kronos_raw_5" if h == 5 else "kronos_raw_20"].fillna(0.0).values
+            elif m in ("kronos", "timesfm"):
+                # zero-shot pretrained model used directly: its excess-return forecast IS the prediction (no training)
+                pred = test[f"{m}_raw_5" if h == 5 else f"{m}_raw_20"].fillna(0.0).values
             elif m == "arima":
                 from src.models.arima import arima_predictions
                 a = s["arima"]
@@ -215,7 +218,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
                .unstack("model"))
 
     tag = (f"{source}{'_' + signal if source == 'synthetic' else ''}_{asset}_h{h}"
-           f"{'_fund' if use_fund else ''}{'_sect' if use_sectors else ''}{'_kron' if use_kronos else ''}{'_rank' if objective == 'rank' else ''}{'_macro' if use_macro else ''}{'_news' if use_news else ''}{f'_from{start_year}' if start_year else ''}")
+           f"{'_fund' if use_fund else ''}{'_sect' if use_sectors else ''}{'_kron' if use_kronos else ''}{'_tfm' if use_timesfm else ''}{'_rank' if objective == 'rank' else ''}{'_macro' if use_macro else ''}{'_news' if use_news else ''}{f'_from{start_year}' if start_year else ''}")
     out = path("results") / (name or f"{datetime.now():%Y%m%d_%H%M}_{tag}")
     out.mkdir(parents=True, exist_ok=True)
     table.to_csv(out / "metrics.csv", index=False)
@@ -227,7 +230,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
     (out / "dm_tests.json").write_text(json.dumps(dm, indent=2))
     (out / "config.json").write_text(json.dumps({
         "source": source, "signal": signal, "asset": asset, "horizon": h, "models": list(models),
-        "features": feats, "macro": use_macro, "news": use_news, "fundamentals": use_fund, "sectors": use_sectors, "kronos": use_kronos, "objective": objective, "start_year": start_year, "shrink": shrink, "train_step": train_step,
+        "features": feats, "macro": use_macro, "news": use_news, "fundamentals": use_fund, "sectors": use_sectors, "kronos": use_kronos, "timesfm": use_timesfm, "objective": objective, "start_year": start_year, "shrink": shrink, "train_step": train_step,
         "n_tickers": int(panel["ticker"].nunique()), "settings": s}, indent=2, default=str))
 
     if verbose:
@@ -261,6 +264,7 @@ if __name__ == "__main__":
     p.add_argument("--sectors", action="store_true", help="add sector momentum + within-sector ranks")
     p.add_argument("--rank", action="store_true", help="train XGBoost to rank stocks per date (rank:pairwise)")
     p.add_argument("--kronos", action="store_true", help="add Kronos forecasts as features (needs kronos_forecasts.parquet)")
+    p.add_argument("--timesfm", action="store_true", help="add TimesFM forecasts as features (needs timesfm_forecasts.parquet)")
     p.add_argument("--start-year", type=int, help="first test year (e.g. the first year with news coverage)")
     p.add_argument("--n-stocks", type=int, default=60)
     p.add_argument("--train-step", type=int, default=1, help="use every Nth day for training (5 = 5x faster)")
@@ -269,4 +273,4 @@ if __name__ == "__main__":
     run(a.data, a.signal, tuple(a.models), a.horizon, a.n_stocks, a.train_step, a.name,
         asset=a.asset, use_macro=a.macro, shrink=not a.no_shrink, use_news=a.news,
         start_year=a.start_year, use_fund=a.fundamentals, use_sectors=a.sectors,
-        objective="rank" if a.rank else "regression", use_kronos=a.kronos)
+        objective="rank" if a.rank else "regression", use_kronos=a.kronos, use_timesfm=a.timesfm)
