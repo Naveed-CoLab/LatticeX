@@ -8,6 +8,7 @@ python-dotenv>=1.0
 requests>=2.31
 tenacity>=8.2
 xgboost>=2.1
+lightgbm>=4.0             # ensemble member
 scikit-learn>=1.4       # required by xgboost.XGBRegressor
 statsforecast>=1.7
 joblib>=1.3
@@ -16,6 +17,7 @@ kaggle>=1.6              # push data/notebooks to Kaggle GPUs
 
 # Later stages (install when you reach them)
 # polars duckdb pandas_market_calendars optuna shap mlflow pandera
-# torch transformers                             <- only for local daily FinBERT scoring (src/news/sentiment.py)
+# torch                                          <- MLP ensemble member (preinstalled on Kaggle); CPU build is fine locally
+# transformers                                   <- only for local daily FinBERT scoring (src/news/sentiment.py)
 # timesfm huggingface_hub                       <- Kronos/TimesFM stage (Kaggle)
 # fastapi uvicorn sqlalchemy psycopg redis       <- API + app (FYP-2)

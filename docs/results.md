@@ -33,6 +33,17 @@ Rank IC by year for the best setup: 2012 0.014 · 2013 0.006 · 2014 0.006 · 20
 - Adding Kronos to XGBoost changes rank IC by +0.0007: better in 6 years, worse in 5. That is within noise, and Kronos features are not among the top features.
 - **Decision:** Kronos is not in the final FYP-1 model (no reliable gain, and it would need a daily GPU run). Interesting detail for FYP-2: Kronos did well in 2016 when XGBoost did badly, so it may help in an ensemble or after fine-tuning on US stocks.
 
+### TimesFM 2.5 (zero-shot, weekly forecasts)
+
+| Model (20-day) | Run folder | Hit rate | Rank IC | IC t-stat | Positive years |
+|---|---|---|---|---|---|
+| XGBoost, fundamentals + sectors | `20261112_1138_real_stock_h20_fund_sect` | 50.7% | 0.0140 | 1.80 | 11 / 13 |
+| TimesFM 2.5 alone (no training) | same run | 49.95% | −0.0017 | −0.27 | 7 / 13 |
+| XGBoost + TimesFM forecasts as features | `20261112_1147_real_stock_h20_fund_sect_tfm` | 50.8% | 0.0128 | 1.55 | 9 / 13 |
+
+- TimesFM has no ranking skill: its forecasts barely differ between stocks (spread 1.6%), close to a random walk.
+- Adding it to XGBoost makes the model slightly worse. **Decision: OUT.** See [`decisions.md`](decisions.md#key-finding-pretrained-models-vs-our-model).
+
 ## 3. Other horizons (fundamentals + sectors)
 
 | Horizon | Hit rate | Rank IC | IC t-stat |
@@ -59,7 +70,6 @@ All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), s
 
 ## 6. Pending
 
-- TimesFM zero-shot comparison (code ready)
 - ARIMA baseline
 - Brackets with calibrated P(up) for 5 / 60 days
 

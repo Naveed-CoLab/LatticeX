@@ -10,6 +10,7 @@ Examples
   python -m scripts.run_experiment --data real --fundamentals         # + SEC fundamentals
   python -m scripts.run_experiment --data real --models random_walk xgboost arima
   python -m scripts.run_experiment --data real --horizon 5
+  python -m scripts.run_experiment --data real --fundamentals --sectors --models random_walk xgboost lightgbm mlp ridge ensemble
 
 Output: results/<run_name>/metrics.csv, rank_ic_by_year.csv, dm_tests.json, importance.csv,
         shrink.csv, predictions.parquet, config.json
@@ -35,6 +36,7 @@ from src.features.sector import SECTOR_FEATURES, sector_features
 from src.features.news import NEWS_FEATURES, news_features
 from src.features.price import FEATURES as PRICE_FEATURES, price_features
 from src.folds import eval_dates, make_folds
+from src.models.ensemble import LGBMForecaster, MLPForecaster, RidgeForecaster, ensemble_rank
 from src.models.random_walk import RandomWalk
 from src.models.xgb_model import XGBForecaster
 from src.targets import make_targets, transform_target
@@ -110,9 +112,30 @@ def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
     return panel.reset_index(drop=True), feature_cols
 
 
+ENSEMBLE_MEMBERS = ("xgboost", "lightgbm", "mlp")
+TRAINED = ("xgboost", "lightgbm", "mlp", "ridge")
+
+
+def make_model(name: str, s: dict, objective: str = "regression"):
+    if name == "xgboost":
+        return XGBForecaster(s["xgb"], objective=objective)
+    if name == "lightgbm":
+        return LGBMForecaster()
+    if name == "mlp":
+        return MLPForecaster()
+    if name == "ridge":
+        return RidgeForecaster()
+    raise ValueError(name)
+
+
 def fit_xgb_shrunk(train: pd.DataFrame, y_col: str, feats: list, s: dict,
                    objective: str = "regression") -> tuple[XGBForecaster, float]:
-    """Train XGBoost, then learn how much to trust it.
+    return fit_shrunk("xgboost", train, y_col, feats, s, objective)
+
+
+def fit_shrunk(name: str, train: pd.DataFrame, y_col: str, feats: list, s: dict,
+               objective: str = "regression"):
+    """Train a model, then learn how much to trust it.
 
     An inner model is trained on the older part of the training years and checked on the most
     recent 20% (with an embargo gap). k = least-squares slope of real outcome on prediction, kept
@@ -126,15 +149,15 @@ def fit_xgb_shrunk(train: pd.DataFrame, y_col: str, feats: list, s: dict,
     inner, val = train[train["date"] <= inner_end], train[train["date"] >= cut]
     k = 1.0
     if len(inner) > 1000 and len(val) > 200:
-        m = XGBForecaster(s["xgb"], objective=objective).fit(inner[feats], transform_target(inner, y_col, how),
-                                                             dates=inner["date"].values)
+        m = make_model(name, s, objective).fit(inner[feats], transform_target(inner, y_col, how),
+                                               dates=inner["date"].values)
         p, y = m.predict(val[feats]), val[y_col].values
         if objective == "rank":                       # ranker scores have no units: centre them per date first
             p = p - pd.Series(p).groupby(val["date"].values).transform("mean").values
         k = float(np.dot(p, y) / max(np.dot(p, p), 1e-12))
         k = max(k, 0.0) if (how == "rank" or objective == "rank") else min(max(k, 0.0), 1.0)
-    model = XGBForecaster(s["xgb"], objective=objective).fit(train[feats], transform_target(train, y_col, how),
-                                                             dates=train["date"].values)
+    model = make_model(name, s, objective).fit(train[feats], transform_target(train, y_col, how),
+                                               dates=train["date"].values)
     return model, k
 
 
@@ -174,22 +197,32 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
         assert train[end_col].max() < f.test_start, "target leakage: a training target ends inside the test year"
         base = test[["date", "ticker", y]].rename(columns={y: "y_true"}).assign(fold=f.year)
 
+        trained = {}                                   # name -> (shrunk prediction, raw prediction)
+        need = [m for m in TRAINED if m in models or ("ensemble" in models and m in ENSEMBLE_MEMBERS)]
+        for m in need:
+            if shrink:
+                model, k = fit_shrunk(m, train, y, feats, s, objective if m == "xgboost" else "regression")
+            else:
+                model, k = make_model(m, s, objective if m == "xgboost" else "regression").fit(
+                    train[feats], transform_target(train, y, s["target_transform"]), dates=train["date"].values), 1.0
+            raw = model.predict(test[feats])
+            if m == "xgboost" and objective == "rank":
+                raw = raw - pd.Series(raw).groupby(test["date"].values).transform("mean").values
+            trained[m] = (k * raw, raw)
+            if m == "xgboost":
+                importances.append(model.importance().rename(f.year))
+                shrinks.append({"fold": f.year, "k": k})
+            else:
+                shrinks.append({"fold": f.year, "k": k, "model": m})
         for m in models:
             raw = None
             if m == "random_walk":
                 pred = RandomWalk().predict(test)
-            elif m == "xgboost":
-                if shrink:
-                    model, k = fit_xgb_shrunk(train, y, feats, s, objective)
-                else:
-                    model, k = XGBForecaster(s["xgb"], objective=objective).fit(
-                        train[feats], transform_target(train, y, s["target_transform"]), dates=train["date"].values), 1.0
-                raw = model.predict(test[feats])
-                if objective == "rank":
-                    raw = raw - pd.Series(raw).groupby(test["date"].values).transform("mean").values
-                pred = k * raw
-                importances.append(model.importance().rename(f.year))
-                shrinks.append({"fold": f.year, "k": k})
+            elif m in TRAINED:
+                pred, raw = trained[m]
+            elif m == "ensemble":
+                pred = np.mean([trained[x][0] for x in ENSEMBLE_MEMBERS], axis=0)
+                raw = ensemble_rank([trained[x][1] for x in ENSEMBLE_MEMBERS], test["date"].values)
             elif m in ("kronos", "timesfm"):
                 # zero-shot pretrained model used directly: its excess-return forecast IS the prediction (no training)
                 pred = test[f"{m}_raw_5" if h == 5 else f"{m}_raw_20"].fillna(0.0).values
@@ -199,9 +232,10 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
                 pred = arima_predictions(prices, test, h, s["benchmark"], a["window"], a["max_p"], a["max_q"])
             else:
                 raise ValueError(f"unknown model {m}")
-            all_preds.append(base.assign(model=m, y_pred=pred, y_raw=raw if m == "xgboost" else pred))
+            all_preds.append(base.assign(model=m, y_pred=pred, y_raw=raw if raw is not None else pred))
         if verbose:
-            k_txt = f", shrink k={shrinks[-1]['k']:.2f}" if shrinks and shrinks[-1]["fold"] == f.year else ""
+            ks = [x for x in shrinks if x["fold"] == f.year]
+            k_txt = (", shrink k " + " ".join(f"{x.get('model', 'xgboost')}={x['k']:.2f}" for x in ks)) if ks else ""
             print(f"  fold {f.year}: train to {f.train_end.date()} ({len(train):,} rows), "
                   f"test {len(test):,} rows{k_txt}  [{time.time() - t0:.0f}s]")
 
@@ -240,7 +274,9 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
             verdict = "better than" if r["dm_stat"] < 0 and r["p_value"] < 0.05 else "NOT significantly better than"
             print(f"Diebold-Mariano {m} vs random_walk: stat {r['dm_stat']:.2f}, p={r['p_value']:.3f} -> {verdict} Random Walk")
         if shrinks:
-            print(f"Average shrink k: {np.mean([x['k'] for x in shrinks]):.2f}  (0 = no trust in the model, 1 = full trust)")
+            sk = pd.DataFrame(shrinks).fillna({"model": "xgboost"}) if "model" in pd.DataFrame(shrinks) else pd.DataFrame(shrinks).assign(model="xgboost")
+            print("Average shrink k: " + ", ".join(f"{m} {v:.2f}" for m, v in sk.groupby("model")["k"].mean().items())
+                  + "  (0 = no trust in the model, 1 = full trust)")
         if importances:
             top = pd.concat(importances, axis=1).mean(axis=1).sort_values(ascending=False).head(8)
             print("Top features: " + ", ".join(top.index))

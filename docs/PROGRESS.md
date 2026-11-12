@@ -86,7 +86,9 @@ Daily automation (later): Windows Task Scheduler, weekdays ~2 pm PT → Tiingo +
 - [x] `kronos --years 2010 2024` ✅: 59,699 forecasts, 189 dates, 1.74 GPU h
 - [x] Comparison ✅: Kronos alone IC 0.0087 (t 0.81); XGBoost + Kronos 0.0147 (t 1.83) vs 0.0140 → no reliable gain, Kronos not in final model
 - [x] TimesFM 2.5 zero-shot runner + features + tests ✅
-- [ ] **Run** `timesfm --timing`, then `timesfm --years 2010 2024`, then comparison with TimesFM
+- [x] `timesfm --timing` ✅: 136 forecasts/s → full run ≈ 0.45 GPU h
+- [x] `timesfm --years 2010 2024` ✅: 239,117 weekly forecasts, 23 GPU min
+- [x] TimesFM comparison ✅: alone IC −0.0017; + XGBoost 0.0128 < 0.0140 → OUT
 - [ ] TimesFM 2.5 zero-shot (same pattern) → comparison row
 - [ ] FYP-2: fine-tune Kronos on US stocks 2000–2017 (our own US-only Kronos)
 - [ ] EDGAR fundamentals ingest (first-filed values, TTM) → fundamental features
@@ -147,6 +149,25 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 ---
 
 ## Work log (newest first)
+
+### 12 Nov 2026 (ensemble)
+- Decision (with Naveed): push accuracy with an **ensemble** now; Kronos fine-tuning + live news in FYP-2.
+- New `src/models/ensemble.py`: LightGBM, Ridge, MLP (PyTorch, GPU) + `ensemble_rank` (equal-weight average of per-date ranks). Every member gets the same shrinkage step as XGBoost.
+- `run_experiment --models ... lightgbm mlp ridge ensemble`. Synthetic check: all find the planted momentum signal (IC 0.08–0.12, t > 7) and none show skill on noise.
+- Tests 21 → 23. `lightgbm` added to requirements; CI installs CPU torch.
+- Next: run the ensemble on real data.
+
+### 12 Nov 2026 (TimesFM results)
+- **TimesFM alone:** hit 49.95%, rank IC −0.0017 (t −0.27): no skill. **XGBoost + TimesFM:** IC 0.0128 (t 1.55), 9/13 positive years vs 0.0140 / 11/13 without → worse.
+- **Decision:** TimesFM OUT. Both pretrained models tested; neither beats our cross-sectional XGBoost. Final FYP-1 model stays XGBoost (price + fundamentals + sectors). Written up as a key finding in `decisions.md`.
+- Next: brackets with calibrated P(up) for 5/20/60 days, ARIMA baseline, then lock the final model.
+
+### 12 Nov 2026 (TimesFM full run)
+- TimesFM 2.5 zero-shot 2010–2024 ✅: 755 weekly dates, **239,117 forecasts** at 180/s, 23 min on one T4. `timesfm_forecasts.parquet` (9 MB) on PC and Kaggle. Next: comparison run.
+
+### 12 Nov 2026 (TimesFM timing)
+- TimesFM 2.5 loads and runs on Kaggle T4: 136 forecasts/s → weekly 2010–2024 run ≈ 0.45 GPU h (Kronos monthly took 1.7 h).
+- Sanity: excess vs SPY mean −0.05%, cross-stock spread 1.6% (much more cautious than Kronos's 12%), average 80% band 16.4% wide (our brackets: 19.8%).
 
 ### 12 Nov 2026 (decision log)
 - New `docs/decisions.md`: every model, feature group, method and data choice with status IN / OUT / PENDING and the reason. Updated after each experiment from now on.

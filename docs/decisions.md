@@ -16,7 +16,8 @@ flowchart LR
     B -->|+ sectors| C[0.0140 ✓ best]
     C -->|ranking objective: 0.0080 ✗| X2[rank objective OUT]
     C -->|+ Kronos: 0.0147, noise ✗| X3[Kronos OUT]
-    C -->|+ TimesFM| P1[pending]
+    C -->|+ TimesFM: 0.0128 ✗| X4[TimesFM OUT]
+    C -->|ensemble XGB+LGBM+MLP| P1[pending]
     C -->|+ news| P2[deferred to FYP-2]
 ```
 
@@ -30,9 +31,15 @@ flowchart LR
 | Quantile XGBoost + conformal (brackets) | **IN** | 80% coverage 0.801 vs naive 0.773 | Calibrated ranges; beats the naive normal baseline |
 | Kronos-small, zero-shot, alone | **OUT** | IC 0.0087, t 0.81, 7/13 years | Weaker and inconsistent; forecasts too large (RMSE 0.140 vs 0.074) |
 | XGBoost + Kronos forecasts as features | **OUT** | IC 0.0147 vs 0.0140 | +0.0007 is noise (better 6 yrs, worse 5); needs a daily GPU run. Revisit in FYP-2 (ensemble / US fine-tune) |
-| TimesFM 2.5, zero-shot | **PENDING** | — | Code + tests ready; speed test next |
+| TimesFM 2.5, zero-shot, alone | **OUT** | IC −0.0017, t −0.27, 7/13 years | No skill at ranking stocks: forecasts stay close to "no change" (spread between stocks 1.6%) |
+| XGBoost + TimesFM forecasts as features | **OUT** | IC 0.0128 (t 1.55) vs 0.0140 | Makes the model worse (9/13 positive years vs 11/13): extra noisy inputs |
 | ARIMA (per stock) | **PENDING** | — | Classical baseline for the report |
-| Ensemble / regime models | **FYP-2** | — | After single models are final |
+| LightGBM | **PENDING** | — | Second tree model with different errors; ensemble member |
+| Small neural net (MLP, PyTorch) | **PENDING** | — | Learns smooth feature combinations trees miss; ensemble member |
+| Ridge (linear) | **PENDING** | — | Simple, stable reference |
+| **Ensemble** (XGBoost + LightGBM + MLP, equal-weight rank average) | **PENDING** | — | How quant firms combine models: different models make different mistakes, averaging cancels part of the noise. Equal weights fixed in advance, so no overfitting to test years |
+| Regime models | **FYP-2** | — | After the ensemble |
+| Kronos fine-tuned on US stocks | **FYP-2** | — | Pretrained route, ~3 days and uncertain; zero-shot versions did not help |
 
 ## Feature groups
 
@@ -44,7 +51,7 @@ flowchart LR
 | Sector features (12) | **IN** | 0.0115 → 0.0140 | Biggest single gain; compares stocks within their sector |
 | News sentiment (Benzinga + FinBERT) | **DEFERRED (FYP-2)** | — | Plan delivers ~2 articles/day: too sparse to test. FinBERT licence is non-commercial |
 | Kronos forecasts (2) | **OUT** | see Models | No reliable gain |
-| TimesFM forecasts (3) | **PENDING** | — | — |
+| TimesFM forecasts (3) | **OUT** | 0.0140 → 0.0128 | Hurts ranking; see Models |
 
 ## Method choices
 
@@ -59,6 +66,18 @@ flowchart LR
 | Prediction shrinkage | Yes | Scales forecasts to the skill seen in training; avoids overconfident numbers |
 | P(up) calibration | Isotonic, added | Raw P(up) was right 54.7% vs a 57.7% "always up" base rate |
 | Kronos grid | Monthly, 2 samples | Weekly would take ~10 GPU h; monthly forecasts still cover every period |
+
+## Key finding: pretrained models vs our model
+
+Two large pretrained forecasting models were tested zero-shot on the same stocks, dates and metrics:
+
+| | Rank IC (20-day) | t-stat | Verdict |
+|---|---|---|---|
+| **Our XGBoost (price + fundamentals + sectors)** | **0.0140** | **1.80** | best |
+| Kronos-small (trained on market candles) | 0.0087 | 0.81 | weaker, inconsistent |
+| TimesFM 2.5 (general time series) | −0.0017 | −0.27 | no skill |
+
+Each pretrained model sees **one stock's price history at a time**. Our model compares **all stocks on the same day** and adds company fundamentals and sector context. For "which stock will beat the market", the cross-sectional, finance-specific model wins. This matches the finance literature: a single price series alone carries little predictable signal. Pretrained models remain an FYP-2 option (fine-tuning on US stocks, ensembles).
 
 ## Data decisions
 

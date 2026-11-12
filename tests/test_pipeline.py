@@ -325,3 +325,28 @@ def test_timesfm_runner_ignores_future_prices(tmp_path, monkeypatch):
     pd.testing.assert_frame_equal(a[early], b.loc[a.index[early]])
     assert not np.allclose(a[~early].values, b.loc[a.index[~early]].values)   # later ones did change
     assert set(R.COLS) <= set(a.columns) and (a["timesfm_q90_20"] > a["timesfm_q10_20"]).all()
+
+
+def test_ensemble_rank_is_scale_free():
+    from src.models.ensemble import ensemble_rank
+    d = np.array(["a"] * 4 + ["b"] * 4)
+    p1 = np.array([1, 2, 3, 4, 10, 20, 30, 40.0])
+    p2 = p1 * 1000 - 7                                   # same order, different scale -> same ranks
+    e = ensemble_rank([p1, p2], d)
+    assert np.allclose(e, ensemble_rank([p1], d))
+    assert np.allclose(pd.Series(e).groupby(d).mean().values, 0.0)
+
+
+@pytest.mark.slow
+def test_ensemble_finds_signal_and_not_noise():
+    pytest.importorskip("torch")
+    pytest.importorskip("lightgbm")
+    models = ("random_walk", "xgboost", "lightgbm", "mlp", "ridge", "ensemble")
+    good = run("synthetic", "momentum", models=models, n_stocks=30, train_step=5, name="pytest_ens_m", verbose=False)
+    t = good["metrics"].set_index("model")
+    for m in models[1:]:
+        assert t.loc[m, "rank_ic"] > 0.03 and t.loc[m, "ic_tstat_nw"] > 3, m
+    noise = run("synthetic", "none", models=models, n_stocks=30, train_step=5, name="pytest_ens_n", verbose=False)
+    t = noise["metrics"].set_index("model")
+    for m in models[1:]:
+        assert t.loc[m, "ic_tstat_nw"] < 2.5, m          # no 'skill' on pure noise
