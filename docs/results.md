@@ -44,7 +44,23 @@ Rank IC by year for the best setup: 2012 0.014 · 2013 0.006 · 2014 0.006 · 20
 - TimesFM has no ranking skill: its forecasts barely differ between stocks (spread 1.6%), close to a random walk.
 - Adding it to XGBoost makes the model slightly worse. **Decision: OUT.** See [`decisions.md`](decisions.md#key-finding-pretrained-models-vs-our-model).
 
-## 3. Other horizons (fundamentals + sectors)
+## 3. Ensemble (20-day, fundamentals + sectors)
+
+Run `20261112_1227_real_stock_h20_fund_sect`; combinations in `ensemble_combinations.csv` (same predictions, re-combined).
+
+| Model / combination | Rank IC | IC t-stat | Hit rate | Positive years | IC 2012–17 | IC 2018–24 |
+|---|---|---|---|---|---|---|
+| XGBoost | 0.0140 | 1.80 | 50.7% | 11 | 0.0057 | 0.0209 |
+| LightGBM | 0.0080 | 1.00 | 50.5% | 9 | 0.0001 | 0.0147 |
+| MLP (neural net) | 0.0149 | 1.96 | 50.4% | 10 | 0.0240 | 0.0070 |
+| Ridge | 0.0042 | 0.41 | 50.1% | 7 | 0.0017 | 0.0065 |
+| **XGBoost + MLP** | **0.0168** | **2.04** | 50.5% | **11** | **0.0171** | **0.0163** |
+| XGBoost + LightGBM + MLP | 0.0143 | 1.71 | 50.6% | 10 | 0.0116 | 0.0165 |
+| All four | 0.0130 | 1.40 | 50.5% | 10 | 0.0103 | 0.0153 |
+
+Correlation of the models' stock rankings: XGBoost–LightGBM 0.86, XGBoost–MLP 0.43, MLP–Ridge 0.55. Combining models that disagree (tree + neural net) is what helps. **Final model: XGBoost + MLP.**
+
+## 4. Other horizons (fundamentals + sectors)
 
 | Horizon | Hit rate | Rank IC | IC t-stat |
 |---|---|---|---|
@@ -52,7 +68,7 @@ Rank IC by year for the best setup: 2012 0.014 · 2013 0.006 · 2014 0.006 · 20
 | 20 days | 50.7% | 0.0140 | 1.80 |
 | 60 days | 50.9% | 0.0156 | 1.31 |
 
-## 4. Price brackets (20-day)
+## 5. Price brackets (20-day)
 
 | Metric | Model | Naive normal |
 |---|---|---|
@@ -64,17 +80,17 @@ Rank IC by year for the best setup: 2012 0.014 · 2013 0.006 · 2014 0.006 · 20
 
 Raw P(up) hit 54.7% vs a 57.7% "always up" base rate, so isotonic calibration was added (re-run pending).
 
-## 5. Single-feature ICs (2010–2024)
+## 6. Single-feature ICs (2010–2024)
 
 All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), short-term reversal (`ret_5`, `ret_20` negative), free-cash-flow yield (+0.013), sector-relative momentum (+0.013), sector-relative earnings surprise (+0.011), accruals (−0.011). File: [`../results/factor_ic_2010_2024.csv`](../results/factor_ic_2010_2024.csv).
 
-## 6. Pending
+## 7. Pending
 
 - ARIMA baseline
 - Brackets with calibrated P(up) for 5 / 60 days
 
 ## Limitations
 
-- Skill is small and not yet significant at the 5% level (t ≈ 1.8). This is normal for honest stock forecasting; large claimed accuracies usually come from look-ahead bias.
+- Skill is small: the final ensemble just passes the 5% significance bar (t 2.04). This is normal for honest stock forecasting; large claimed accuracies usually come from look-ahead bias.
 - Survivorship bias and the A–PCAR universe (see [`data-sources.md`](data-sources.md)).
 - Transaction costs are not modelled yet.

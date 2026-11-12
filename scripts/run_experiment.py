@@ -112,7 +112,7 @@ def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
     return panel.reset_index(drop=True), feature_cols
 
 
-ENSEMBLE_MEMBERS = ("xgboost", "lightgbm", "mlp")
+ENSEMBLE_MEMBERS = ("xgboost", "mlp")   # one tree model + one neural net: least correlated pair (see docs/decisions.md)
 TRAINED = ("xgboost", "lightgbm", "mlp", "ridge")
 
 

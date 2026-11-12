@@ -124,8 +124,9 @@ Walk-forward backtest: 466 S&P 500 stocks, test years 2012–2024, scored weekly
 | Random Walk (baseline) | 50.0% | 0 | — |
 | XGBoost, price features | 50.4% | 0.0128 | 1.59 |
 | + fundamentals | 50.7% | 0.0115 | 1.66 |
-| **+ fundamentals + sectors (best)** | **50.7%** | **0.0140** | **1.80** |
+| + fundamentals + sectors | 50.7% | 0.0140 | 1.80 |
 | + ranking objective | 50.3% | 0.0080 | 1.09 |
+| **Ensemble: XGBoost + neural net (final)** | **50.5%** | **0.0168** | **2.04** |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/rank_ic_by_year_dark.png">

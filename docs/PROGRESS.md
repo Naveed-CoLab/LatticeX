@@ -150,6 +150,12 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 
 ## Work log (newest first)
 
+### 12 Nov 2026 (ensemble results)
+- Real-data run: XGBoost 0.0140 (t 1.80) · LightGBM 0.0080 · **MLP 0.0149 (t 1.96)** · Ridge 0.0042 · 3-model ensemble 0.0143.
+- Re-combined the saved predictions: **XGBoost + MLP = IC 0.0168, t 2.04, 11/13 years**, stable across 2012–17 (0.0171) and 2018–24 (0.0163). LightGBM ranks 86% like XGBoost (redundant); MLP only 43% → real diversification.
+- **Decision:** final model = XGBoost + MLP rank-average ensemble (`ENSEMBLE_MEMBERS` updated). LightGBM, Ridge OUT. First result past t = 2.
+- Next: sector-neutral target, full universe (Tiingo upgrade, waiting on Naveed), SEC insider/8-K features.
+
 ### 12 Nov 2026 (ensemble)
 - Decision (with Naveed): push accuracy with an **ensemble** now; Kronos fine-tuning + live news in FYP-2.
 - New `src/models/ensemble.py`: LightGBM, Ridge, MLP (PyTorch, GPU) + `ensemble_rank` (equal-weight average of per-date ranks). Every member gets the same shrinkage step as XGBoost.

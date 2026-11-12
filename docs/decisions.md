@@ -6,8 +6,8 @@ What we tried, what it scored, and whether it is **in**, **out** or **pending** 
 
 ## Current final model (FYP-1 candidate)
 
-> **XGBoost** on **price + fundamentals + sector** features, cross-sectional ranks, winsorised target, prediction shrinkage.
-> 20-day rank IC **0.0140** (t 1.80), positive in **11 / 13** years. Price brackets: **quantile XGBoost + conformal calibration** (80% range covers 80.1%).
+> **Ensemble of XGBoost + neural net (MLP)**, equal-weight rank average, on **price + fundamentals + sector** features, cross-sectional ranks, winsorised target, prediction shrinkage.
+> 20-day rank IC **0.0168** (t **2.04**, first result past the significance bar), positive in **11 / 13** years, equally strong in 2012–17 and 2018–24. Price brackets: **quantile XGBoost + conformal calibration** (80% range covers 80.1%).
 
 ```mermaid
 flowchart LR
@@ -17,7 +17,7 @@ flowchart LR
     C -->|ranking objective: 0.0080 ✗| X2[rank objective OUT]
     C -->|+ Kronos: 0.0147, noise ✗| X3[Kronos OUT]
     C -->|+ TimesFM: 0.0128 ✗| X4[TimesFM OUT]
-    C -->|ensemble XGB+LGBM+MLP| P1[pending]
+    C -->|ensemble XGBoost + MLP| E[0.0168 ✓ final]
     C -->|+ news| P2[deferred to FYP-2]
 ```
 
@@ -34,10 +34,11 @@ flowchart LR
 | TimesFM 2.5, zero-shot, alone | **OUT** | IC −0.0017, t −0.27, 7/13 years | No skill at ranking stocks: forecasts stay close to "no change" (spread between stocks 1.6%) |
 | XGBoost + TimesFM forecasts as features | **OUT** | IC 0.0128 (t 1.55) vs 0.0140 | Makes the model worse (9/13 positive years vs 11/13): extra noisy inputs |
 | ARIMA (per stock) | **PENDING** | — | Classical baseline for the report |
-| LightGBM | **PENDING** | — | Second tree model with different errors; ensemble member |
-| Small neural net (MLP, PyTorch) | **PENDING** | — | Learns smooth feature combinations trees miss; ensemble member |
-| Ridge (linear) | **PENDING** | — | Simple, stable reference |
-| **Ensemble** (XGBoost + LightGBM + MLP, equal-weight rank average) | **PENDING** | — | How quant firms combine models: different models make different mistakes, averaging cancels part of the noise. Equal weights fixed in advance, so no overfitting to test years |
+| LightGBM | **OUT** | IC 0.0080, t 1.00 | Its rankings are 86% the same as XGBoost's, so it adds a second vote for trees, not new information; it pulled the ensemble down to 0.0143 |
+| Small neural net (MLP, PyTorch) | **IN** (ensemble member) | IC 0.0149, t 1.96, 10/13 years | Best single model; only 43% correlated with XGBoost, strong in 2012–17 where XGBoost was weak |
+| Ridge (linear) | **OUT** | IC 0.0042, t 0.41 | Too simple; lowers any ensemble it joins |
+| **Ensemble: XGBoost + MLP** (equal-weight rank average) | **IN — final model** | **IC 0.0168, t 2.04, 11/13 years** | +20% over XGBoost alone, and stable: 0.0171 in 2012–17, 0.0163 in 2018–24 (XGBoost alone: 0.0057 / 0.0209). Members chosen by how *different* their predictions are (correlation, no test outcomes used); equal weights fixed in advance |
+| Ensemble: XGBoost + LightGBM + MLP | OUT | IC 0.0143 | Two near-identical tree models outvote the neural net |
 | Regime models | **FYP-2** | — | After the ensemble |
 | Kronos fine-tuned on US stocks | **FYP-2** | — | Pretrained route, ~3 days and uncertain; zero-shot versions did not help |
 
@@ -78,6 +79,15 @@ Two large pretrained forecasting models were tested zero-shot on the same stocks
 | TimesFM 2.5 (general time series) | −0.0017 | −0.27 | no skill |
 
 Each pretrained model sees **one stock's price history at a time**. Our model compares **all stocks on the same day** and adds company fundamentals and sector context. For "which stock will beat the market", the cross-sectional, finance-specific model wins. This matches the finance literature: a single price series alone carries little predictable signal. Pretrained models remain an FYP-2 option (fine-tuning on US stocks, ensembles).
+
+## Product decisions
+
+| Decision | Why |
+|---|---|
+| Chat app (FYP-2): user sends a ticker or a chart screenshot (e.g. TradingView), an LLM reads it and answers using **our model's** forecast | The LLM is only the interface (reads the image, explains in plain words). The forecast comes from our tested model, not from the LLM guessing from a picture |
+| The screenshot is used to identify the stock and timeframe, not as the prediction input | A chart image holds less information than the price data we already have; image "pattern reading" is not reliable or testable |
+| Every answer shows rank, P(up), price range, top drivers and the model's backtest record, plus "not investment advice" | Honest, explainable output builds trust; US rules on investment advice |
+| Accuracy claims are only from walk-forward backtests and the locked holdout | Claims of 70–90% stock "accuracy" almost always come from look-ahead bias |
 
 ## Data decisions
 
