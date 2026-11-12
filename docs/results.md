@@ -116,7 +116,46 @@ Runs `20261112_1525_…h5`, `20261112_1541_…h20`, `20261112_1558_…h60`. Why 
 | 50% range: coverage (target 0.50) | 0.494 | 0.496 |
 | Worst year (2020, COVID) 80% coverage | 0.725 | 0.762 |
 
-Raw P(up) hit 54.7% vs a 57.7% "always up" base rate, so isotonic calibration was added (re-run pending).
+Raw P(up) hit 54.7% vs a 57.7% "always up" base rate, so isotonic calibration was added (see 5b: it did not fix it).
+
+## 5b. Price ranges on the full universe (634 stocks, all horizons) — final
+
+Runs `20261112_1625_…h5_fund_brackets`, `20261112_1621_…h20_fund_brackets`, `20261112_1630_…h60_fund_brackets`.
+
+| Horizon | 80% coverage (model / naive) | 90% coverage (model / naive) | 50% coverage (model / naive) | Avg width of 80% range |
+|---|---|---|---|---|
+| 5 days | **0.798** / 0.793 | **0.900** / 0.875 | **0.497** / 0.526 | 9.4% |
+| 20 days | **0.803** / 0.775 | **0.904** / 0.866 | **0.498** / 0.497 | 19.8% |
+| 60 days | **0.802** / 0.765 | **0.908** / 0.860 | 0.489 / 0.484 | 35.1% |
+
+Weak year: 2020 (20-day 80% coverage 0.715): ranges were too narrow going into the COVID crash.
+
+**P(up) from the range model: rejected.** Brier score (lower is better) vs the plain historical up-rate:
+
+| Horizon | Model P(up) | Historical rate ("base rate") |
+|---|---|---|
+| 5 days | 0.2513 | **0.2478** |
+| 20 days | 0.2513 | **0.2446** |
+| 60 days | 0.2396 | **0.2378** |
+
+It is worse at every horizon, has no skill at telling stocks apart on a given day (rank IC −0.009), and its extreme values are wrong (20-day: predicted 10% chance up → 57% actually rose). Whether stocks rise over the next weeks is mostly the market's direction, which these features do not predict.
+
+## 5c. What the v1.0 ranking is worth in plain numbers
+
+Stocks sorted each week by the v1.0 forecast (3-seed MLP), test years 2012–2024. Excess = log return minus SPY's. Files `rank_groups_h*.csv` in each v1.0 run folder.
+
+| Rank group | 5d: beat SPY · mean excess | 20d: beat SPY · mean excess | 60d: beat SPY · mean excess |
+|---|---|---|---|
+| Bottom 20% | 48.6% · −0.14% | 48.0% · −0.54% | 47.6% · −1.29% |
+| 20–40% | 48.7% · −0.11% | 48.9% · −0.38% | 47.8% · −1.14% |
+| 40–60% | 49.6% · −0.05% | 49.2% · −0.31% | 48.7% · −0.91% |
+| 60–80% | 50.0% · −0.05% | 49.8% · −0.16% | 49.7% · −0.67% |
+| Top 20% | 50.0% · −0.03% | 49.9% · −0.14% | **50.3%** · −0.49% |
+| **Top minus bottom** | **+0.11%**, 12/13 years | **+0.40%**, 12/13 years | **+0.80%**, 11/13 years |
+
+- The ordering is right and steady: each group does better than the one below it, in almost every year.
+- The typical stock trails SPY slightly (an index is carried by a few big winners, and log returns of a volatile stock average lower), so even the top group only matches SPY. The measurable value today is **avoiding the bottom group**, not picking market-beaters.
+- The gap is before trading costs.
 
 ## 6. Single-feature ICs (2010–2024)
 

@@ -391,3 +391,81 @@ def test_yahoo_prune_sets_aside_recycled_symbols(tmp_path):
     assert (tmp_path / "_rejected" / "S.parquet").exists() and (tmp_path / "PEP.parquet").exists()
     assert (tmp_path / "OLD.parquet").exists() and (tmp_path / "SPGI.parquet").exists()
     assert [m.split()[0] for m in prune(tmp_path, u)] == ["S"]   # re-running is stable (restores, re-checks)
+
+
+@pytest.mark.slow
+def test_crash_risk_is_calibrated_and_beats_baserate():
+    from scripts.run_crash_risk import run as crash_run
+    r = crash_run("synthetic", "volcluster", n_stocks=30, name="pytest_crash", verbose=False)
+    t = r["metrics"].set_index("method")
+    assert t.loc["model", "auc"] > 0.55 and t.loc["model", "brier_skill"] > 0     # finds the volatility signal
+    c = r["calibration"]
+    assert (c["actual"] - c["predicted"]).abs().max() < 0.08                        # "20%" means about 20%
+
+
+def test_sector_neutral_target_is_stock_minus_its_sector_etf():
+    from scripts.run_experiment import build_panel
+    from src.config import load_settings
+    px = make_prices(n_stocks=12, start="2010-01-01", end="2013-12-31", signal="none")
+    w = px.pivot(index="date", columns="ticker", values="adj_close")
+    stocks = [c for c in w if c != "SPY"]
+    etfs = []
+    for name, members in (("XLK", stocks[:4]), ("XLE", stocks[4:8]), ("XLF", stocks[8:])):
+        e = w[members].pct_change().mean(axis=1).fillna(0).add(1).cumprod().mul(100).rename(name)
+        etfs.append(pd.DataFrame({"date": e.index, "ticker": name, "adj_close": e.values}))
+    e = pd.concat(etfs)
+    for c in ("open", "high", "low", "close"):
+        e[c] = e["adj_close"]
+    e["volume"] = 1e6
+    s = load_settings()
+    panel, _ = build_panel(pd.concat([px, e[px.columns]], ignore_index=True), s, "synthetic", False, use_sectors=True)
+    p = panel[panel["sector_etf"].notna() & panel["ys_20"].notna()].sample(50, random_state=0)
+    ey = panel.set_index(["date", "ticker"])["y_20"]
+    for _, r in p.iterrows():
+        assert r["ys_20"] == pytest.approx(r["y_20"] - ey[(r["date"], r["sector_etf"])])
+    assert panel.loc[panel["ticker"].isin(stocks[:4]), "sector_etf"].dropna().eq("XLK").mean() > 0.8
+
+
+def test_recovery_events_measure_days_back_to_pre_drop_price():
+    """Flat at 100, falls to 85 in 5 days, climbs back to 100 thirty days after the low."""
+    from scripts.run_recovery import find_events, recovered_within
+    d = pd.bdate_range("2015-01-01", periods=400)
+    p = np.full(400, 100.0)
+    p[200:205] = [97, 94, 91, 88, 85]
+    p[205:235] = np.linspace(85.5, 100.0, 30)             # back at 100 on index 234
+    px = pd.concat([pd.DataFrame({"date": d, "ticker": "AAA", "adj_close": p}),
+                    pd.DataFrame({"date": d, "ticker": "SPY", "adj_close": 100.0})])
+    ev = find_events(px, "SPY", drop=0.10, window=5)
+    assert len(ev) == 1
+    e = ev.iloc[0]
+    assert e["date"] == d[203] and e["ev_drop"] == pytest.approx(0.88 - 1) and e["ev_market"] == 0
+    assert e["days"] == 234 - 203                          # first close back at the pre-drop price (100)
+    assert recovered_within(ev, 20, 10 ** 6).iloc[0] == 0 and recovered_within(ev, 60, 10 ** 6).iloc[0] == 1
+    assert np.isnan(recovered_within(ev, 60, 203 + 30).iloc[0])     # window reaches the holdout -> unknown
+
+
+@pytest.mark.slow
+def test_recovery_model_has_no_skill_on_random_prices():
+    from scripts.run_recovery import run as rec_run
+    r = rec_run("synthetic", "volcluster", n_stocks=60, name="pytest_recovery", verbose=False)
+    c = r["curve"].set_index("segment").loc["all crashes"]
+    shares = [c[f"recovered_{h}d"] for h in (5, 10, 20, 60, 120, 250)]
+    assert all(a <= b for a, b in zip(shares, shares[1:]))            # more time -> more recoveries
+    assert 0.42 < r["metrics"].set_index("method").loc["model", "auc"] < 0.58   # random walk: nothing to learn
+
+
+def test_sec_events_parse_8k_items():
+    from src.ingest.sec_events import describe, parse_block
+    block = {"form": ["8-K", "10-Q", "8-K", "4", "8-K/A"],
+             "filingDate": ["2024-01-25", "2024-02-01", "2024-03-05", "2024-03-06", "2024-03-07"],
+             "acceptanceDateTime": ["2024-01-25T21:05:11.000Z", "2024-02-01T12:00:00.000Z",
+                                    "2024-03-05T13:30:00.000Z", "2024-03-06T10:00:00.000Z", "2024-03-07T22:00:00.000Z"],
+             "items": ["2.02,9.01", "", "4.02,5.02", "", "8.01"],
+             "accessionNumber": ["a1", "a2", "a3", "a4", "a5"]}
+    df = parse_block(block, "TEST", 123)
+    assert list(df["accession"]) == ["a1", "a3", "a5"]                     # only 8-K / 8-K/A kept
+    assert df.loc[0, "ev_earnings"] and not df.loc[0, "ev_restatement"] and df.loc[0, "severity"] == 1
+    assert df.loc[1, "ev_restatement"] and df.loc[1, "ev_management_change"] and df.loc[1, "severity"] == 3
+    assert df.loc[2, "severity"] == 0 and str(df["accepted"].dt.tz) == "UTC"
+    assert describe("4.02,5.02").startswith("earlier financial reports")   # most serious first
+    assert describe("9.01") == "routine filing"

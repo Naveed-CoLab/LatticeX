@@ -28,6 +28,12 @@ Experiments (GPU)
 Price brackets (GPU)
   python -m scripts.kaggle_cloud brackets "--data real" "--data real --horizon 5" "--data real --horizon 60"
 
+Crash risk (GPU): probability of a >10% drop within 20 days, vs a volatility-only baseline
+  python -m scripts.kaggle_cloud crash "--data real --fundamentals --sectors" "--data real --fundamentals --sectors --horizon 5 --drop 0.05"
+
+Recovery after a crash (GPU): history table + P(back at the pre-drop price within 60 / 20 days)
+  python -m scripts.kaggle_cloud recovery "--data real --fundamentals --sectors" "--data real --fundamentals --sectors --within 20"
+
 Every command waits for Kaggle to finish, then copies the outputs to your PC:
   data files -> data\\clean\\        results -> results\\        logs -> results\\kaggle_<job>.log
 Add --no-wait to start a job and return immediately; collect later with:
@@ -53,7 +59,7 @@ from src.config import ROOT, path
 
 DATA_SLUG, SECRETS_SLUG = "latticeiq-data", "latticeiq-secrets"
 DATA_FILES = ["prices.parquet", "macro.parquet", "news_articles.parquet", "news_scored.parquet",
-              "fundamentals.parquet", "kronos_forecasts.parquet", "timesfm_forecasts.parquet"]
+              "fundamentals.parquet", "kronos_forecasts.parquet", "timesfm_forecasts.parquet", "sec_events.parquet"]
 SECRET_KEYS = ["BENZINGA_API_KEY", "FRED_API_KEY", "TIINGO_API_KEY", "SEC_USER_AGENT"]
 CODE_DIRS = ["src", "scripts", "config"]
 
@@ -66,6 +72,8 @@ JOBS = {
     "news-score":    {"gpu": True, "secrets": False, "sources": [], "keep": ["data/clean/news_scored.parquet"]},
     "experiments":   {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
     "brackets":      {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
+    "crash":         {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
+    "recovery":      {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
     "kronos":        {"gpu": True, "secrets": False, "sources": [],
                       "keep": ["data/clean/kronos_forecasts.parquet", "data/clean/kronos_timing.parquet"]},
     "timesfm":       {"gpu": True, "secrets": False, "sources": [],
@@ -337,6 +345,12 @@ def main(argv: list) -> None:
     elif cmd == "brackets":
         jobs = rest or ["--data real"]
         steps = ["scripts.run_brackets " + j for j in jobs]
+    elif cmd == "recovery":
+        jobs = rest or ["--data real --fundamentals --sectors"]
+        steps = ["scripts.run_recovery " + j for j in jobs]
+    elif cmd == "crash":
+        jobs = rest or ["--data real --fundamentals --sectors"]
+        steps = ["scripts.run_crash_risk " + j for j in jobs]
     else:
         raise SystemExit(f"unknown command {cmd!r}\n{__doc__}")
     v = variant_of(cmd, rest)

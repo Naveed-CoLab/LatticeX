@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b>Which S&P 500 stocks will beat the market over the next 5, 20 and 60 trading days, how far could the price move, and how likely is it to go up?</b>
+  <b>How do S&P 500 stocks rank against the market over the next 5, 20 and 60 trading days, and how far could each price move?</b>
 </p>
 
 <p align="center">
@@ -39,7 +39,9 @@ For every S&P 500 stock on a given day, LatticeIQ produces:
 |---|---|
 | **Excess-return forecast and rank** | Expected return vs SPY over 5 / 20 / 60 trading days, and where the stock ranks against the others |
 | **Price brackets** | 50% / 80% / 90% likely price ranges, calibrated so the 80% range really contains the price about 80% of the time |
-| **P(up)** | Calibrated probability that the price ends higher |
+| **Track record for that rank** | How stocks ranked like this one actually did against SPY in testing |
+| **Crash risk · recovery odds** *(in testing)* | Chance of a 10%+ drop in 20 days; after a crash, chance of getting back to the old price |
+| **Official company news** *(in testing)* | SEC 8-K events (earnings, restatements, executive changes…) as a live feed |
 | **Drivers** | Which features pushed the forecast (feature importance) |
 
 ## App structure
@@ -57,10 +59,10 @@ flowchart TB
     end
     subgraph L3["③ Model layer — trained on Kaggle GPU"]
         direction LR
-        M1[XGBoost<br/>excess return + rank] --- M2[Quantile XGBoost<br/>price brackets + P up] --- M3[Kronos / TimesFM<br/>pretrained forecasts]
+        M1[Neural net v1.0<br/>excess return + rank] --- M2[Quantile XGBoost<br/>price ranges] --- M3[Crash risk · recovery<br/>in testing]
     end
     subgraph L4["④ Daily forecast job"]
-        J1[Forecast table: rank · expected return · 50/80/90% range · P up · top drivers]
+        J1[Forecast table: rank · expected return · 50/80/90% range · top drivers]
     end
     subgraph L5["⑤ Delivery"]
         direction LR
@@ -73,7 +75,7 @@ flowchart TB
 |---|---|---|
 | ① Data | `src/ingest/` | ✅ prices, macro, fundamentals · ⏸ news |
 | ② Features | `src/features/` | ✅ 54 features, leakage-tested |
-| ③ Models | `src/models/`, `scripts/run_experiment.py`, `scripts/run_brackets.py` | ✅ XGBoost, brackets, Kronos · ⏳ TimesFM, ensemble |
+| ③ Models | `src/models/`, `scripts/run_experiment.py`, `scripts/run_brackets.py` | ✅ v1.0 neural net locked, price ranges · ⏳ crash risk, recovery, 8-K events (Kronos, TimesFM, XGBoost ensemble tested and dropped) |
 | ④ Forecast job | `scripts/forecast_today.py` | ⏳ FYP-1 |
 | ⑤ Dashboard / API | `app/` | ⏳ dashboard FYP-1 · API FYP-2 |
 
@@ -84,7 +86,8 @@ flowchart TB
   "date": "2024-12-18", "ticker": "EXAMPLE", "horizon_days": 20,
   "expected_excess_return_vs_spy": 0.012,
   "rank_percentile": 0.91,
-  "p_up": 0.58,
+  "rank_group": "top 20%",
+  "rank_group_history": "beat SPY 49.9% of the time; bottom 20%: 48.0%",
   "price_range": { "50%": [101.2, 107.9], "80%": [97.6, 111.8], "90%": [95.3, 114.6] },
   "top_drivers": ["12-month momentum", "free-cash-flow yield", "sector momentum"]
 }
@@ -98,12 +101,11 @@ flowchart LR
     A[Tiingo prices] --> D[Point-in-time<br/>feature panel]
     B[FRED macro] --> D
     C[SEC EDGAR<br/>fundamentals] --> D
-    K[Kronos<br/>pretrained forecasts] --> D
     D --> E[Walk-forward folds<br/>2012-2024, 60-day embargo]
-    E --> F[XGBoost<br/>excess return]
+    E --> F[Neural net, 3 seeds<br/>excess return]
     E --> G[Quantile XGBoost<br/>+ conformal calibration]
     F --> H[Rank, hit rate, IC,<br/>Diebold-Mariano vs Random Walk]
-    G --> I[Price brackets + P up]
+    G --> I[Price ranges:<br/>coverage, width]
 ```
 
 The key design rule is **no look-ahead**: every feature on date *t* uses only information public by the close of *t* (filing dates, data revision dates, index membership on that day). 19 automated tests check this, including a "random data must show no skill" test and a "planted signal must be found" test. The **2025–26 holdout is locked** and will be used once, at the end of FYP-2.
@@ -136,7 +138,9 @@ Walk-forward backtest (first 466, then the full 634 S&P 500 stocks), test years 
   <img alt="Rank IC by year, positive in 11 of 13 years" src="docs/assets/rank_ic_by_year_light.png" width="100%">
 </picture>
 
-**Price brackets are well calibrated:** the 80% range contained the real price 80.1% of the time (naive normal model: 77.3%), the 90% range 90.2% (naive: 86.4%).
+**Price ranges are well calibrated at every horizon** (634 stocks): the 80% range contained the real price 79.8% / 80.3% / 80.2% of the time at 5 / 20 / 60 days (naive normal model: 79.3% / 77.5% / 76.5%), and the 90% range 90.0% / 90.4% / 90.8% (naive: 87.5% / 86.6% / 86.0%).
+
+**What the ranking skill means in plain numbers** (20-day, v1.0): stocks the model ranked in the bottom 20% trailed its top 20% by 0.4% per 20 days on average, in 12 of 13 years; they beat SPY 48.0% of the time versus 49.9% for the top 20%. The model is better at flagging likely laggards than at finding big winners. The "probability up" from the range model did not beat the plain historical rate and is not used.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bracket_coverage_dark.png">

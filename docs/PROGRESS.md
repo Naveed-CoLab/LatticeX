@@ -150,6 +150,23 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 
 ## Work log (newest first)
 
+### 12 Nov 2026 (price ranges final; P(up) rejected; plain-number check of v1.0)
+- **Price ranges on 634 stocks ✅ final:** 80% coverage 0.798 / 0.803 / 0.802 and 90% coverage 0.900 / 0.904 / 0.908 at 5 / 20 / 60 days; beats naive at all horizons. 2020 weak (0.715).
+- **P(up) OUT:** Brier worse than the base rate at all horizons (20d 0.2513 vs 0.2446), no cross-sectional skill (IC −0.009), extremes wrong (predicted 10% → 57% actual). Shrinking it toward the base rate gave no real gain either.
+- **v1.0 in plain numbers** (rank groups): top-minus-bottom 20% = +0.11% / +0.40% / +0.80% (5 / 20 / 60d), right in 12 / 12 / 11 of 13 years; bottom group beats SPY 48%, top group ~50%. Skill = avoiding laggards; top group only matches SPY. Added "what v1.0 can honestly claim" table to `decisions.md`.
+- README coverage chart regenerated on 634 stocks.
+
+### 12 Nov 2026 (recovery model + SEC event feed)
+- **Recovery after a crash** `scripts/run_recovery.py`: crash = −10% or worse in 5 days (one per stock per 20 days); recovered = close back at the pre-drop price. Output A: history table (share recovered within 5/10/20/60/120/250 days + median days, by market-wide vs stock-specific, drop size, one-day shock vs slide). Output B: calibrated P(recover within 60 or 20 days), walk-forward, vs base rate and drop-size-only baselines. On random synthetic prices the model shows no skill (AUC 0.51), as it should. Kaggle: `kaggle_cloud recovery "..."`.
+- **Official news feed** `src/ingest/sec_events.py`: all 8-K filings per company from SEC submissions API with event kinds + severity 0–3 (restatement, bankruptcy, delisting notice = severe). `--latest N` = live feed of the last N days. History will be tested as features (earnings timing, negative events).
+- Tests 27 → 30 (event timing of recovery, no-skill-on-noise, 8-K item parsing).
+- Next: run crash + recovery + sector-target on Kaggle; download 8-K history on the PC; then 8-K features and insider data.
+
+### 12 Nov 2026 (v1.1 work started)
+- **Crash-risk model** `scripts/run_crash_risk.py`: P(drop > 10% in 20 days), XGBoost classifier + isotonic calibration; baselines = base rate and a volatility-only logistic model. Metrics: AUC, Brier skill, crash rate in the riskiest 10% (lift), calibration by decile, AUC by year. Kaggle: `kaggle_cloud crash "..."`. Synthetic check: calibrated within a few % (test added).
+- **Sector-neutral target** `run_experiment --target sector`: models learn stock minus its point-in-time sector ETF; scored vs SPY like v1.0. Test added (target = stock − its ETF). 27 tests pass.
+- Next: run both on Kaggle; then insider trading (Form 4).
+
 ### 12 Nov 2026 — 🔒 MODEL LOCKED: LatticeIQ v1.0
 - Final run (634 stocks): MLP 3-seed **5d 0.0136 (t 2.63) · 20d 0.0180 (t 2.66) · 60d 0.0229 (t 2.39, hit 51.3%)**; ensemble v2 0.0135 / 0.0159 / 0.0176; XGBoost 0.0099 / 0.0064 / 0.0087.
 - **v1.0 = 3-seed MLP** (primary) — significant at every horizon. Ensemble v2 kept as secondary. Deviation from the pre-declared ensemble written up openly in `decisions.md`; both get the one-time holdout test.

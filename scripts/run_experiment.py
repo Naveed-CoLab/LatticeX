@@ -97,8 +97,15 @@ def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
         if sf["date"].nunique() == 0:
             print("note: no sector ETFs in the data -> sector features skipped")
         else:
-            panel = panel.merge(sf.drop(columns="sector"), on=["date", "ticker"], how="left")
+            panel = panel.merge(sf.rename(columns={"sector": "sector_etf"}), on=["date", "ticker"], how="left")
             feature_cols += SECTOR_FEATURES
+            # sector-neutral targets: stock excess return minus its (point-in-time) sector ETF's excess return
+            etf_y = targ[targ["ticker"].isin(panel["sector_etf"].dropna().unique())]
+            for hh in s["horizons"]:
+                e = etf_y[["date", "ticker", f"y_{hh}"]].rename(columns={"ticker": "sector_etf", f"y_{hh}": "_ey"})
+                panel = panel.merge(e, on=["date", "sector_etf"], how="left")
+                panel[f"ys_{hh}"] = panel[f"y_{hh}"] - panel["_ey"]
+                panel = panel.drop(columns="_ey")
     if use_news and source == "real":
         arts_f, scored_f = path("clean") / "news_articles.parquet", path("clean") / "news_scored.parquet"
         if not (arts_f.exists() and scored_f.exists()):
@@ -168,10 +175,13 @@ def fit_shrunk(name: str, train: pd.DataFrame, y_col: str, feats: list, s: dict,
 def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), horizon=None,
         n_stocks=60, train_step=1, name=None, verbose=True, asset="stock", use_macro=False,
         shrink=True, use_news=False, start_year=None, use_fund=False, use_sectors=False,
-        objective="regression", use_kronos=False, use_timesfm=False) -> dict:
+        objective="regression", use_kronos=False, use_timesfm=False, target="spy") -> dict:
     s = load_settings()
     h = horizon or s["main_horizon"]
     y, end_col = f"y_{h}", f"target_end_{h}"
+    if target == "sector" and not use_sectors:
+        raise SystemExit("--target sector needs --sectors (the sector of each stock comes from the sector step)")
+    yt = f"ys_{h}" if target == "sector" else y    # what the models LEARN; scoring always uses y (excess vs SPY)
     t0 = time.time()
 
     prices = load_prices(source, signal, n_stocks, s["benchmark"], verbose)
@@ -193,7 +203,8 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
 
     all_preds, importances, shrinks = [], [], []
     for f in folds:
-        train = panel[(panel["date"] <= f.train_end) & panel[y].notna() & panel["date"].isin(train_grid)]
+        train = panel[(panel["date"] <= f.train_end) & panel[y].notna() & panel[yt].notna()
+                      & panel["date"].isin(train_grid)]
         test = panel[(panel["date"] >= f.test_start) & (panel["date"] <= f.test_end)
                      & panel["date"].isin(grid) & panel[y].notna() & (panel[end_col] < holdout)]
         if train.empty or test.empty:
@@ -205,10 +216,10 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
         need = [m for m in TRAINED if m in models or ("ensemble" in models and m in ENSEMBLE_MEMBERS)]
         for m in need:
             if shrink:
-                model, k = fit_shrunk(m, train, y, feats, s, objective if m == "xgboost" else "regression")
+                model, k = fit_shrunk(m, train, yt, feats, s, objective if m == "xgboost" else "regression")
             else:
                 model, k = make_model(m, s, objective if m == "xgboost" else "regression").fit(
-                    train[feats], transform_target(train, y, s["target_transform"]), dates=train["date"].values), 1.0
+                    train[feats], transform_target(train, yt, s["target_transform"]), dates=train["date"].values), 1.0
             raw = model.predict(test[feats])
             if m == "xgboost" and objective == "rank":
                 raw = raw - pd.Series(raw).groupby(test["date"].values).transform("mean").values
@@ -259,7 +270,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
                .unstack("model"))
 
     tag = (f"{source}{'_' + signal if source == 'synthetic' else ''}_{asset}_h{h}"
-           f"{'_fund' if use_fund else ''}{'_sect' if use_sectors else ''}{'_kron' if use_kronos else ''}{'_tfm' if use_timesfm else ''}{'_rank' if objective == 'rank' else ''}{'_macro' if use_macro else ''}{'_news' if use_news else ''}{f'_from{start_year}' if start_year else ''}")
+           f"{'_fund' if use_fund else ''}{'_sect' if use_sectors else ''}{'_kron' if use_kronos else ''}{'_tfm' if use_timesfm else ''}{'_sectgt' if target == 'sector' else ''}{'_rank' if objective == 'rank' else ''}{'_macro' if use_macro else ''}{'_news' if use_news else ''}{f'_from{start_year}' if start_year else ''}")
     out = path("results") / (name or f"{datetime.now():%Y%m%d_%H%M}_{tag}")
     out.mkdir(parents=True, exist_ok=True)
     table.to_csv(out / "metrics.csv", index=False)
@@ -271,7 +282,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
     (out / "dm_tests.json").write_text(json.dumps(dm, indent=2))
     (out / "config.json").write_text(json.dumps({
         "source": source, "signal": signal, "asset": asset, "horizon": h, "models": list(models),
-        "features": feats, "macro": use_macro, "news": use_news, "fundamentals": use_fund, "sectors": use_sectors, "kronos": use_kronos, "timesfm": use_timesfm, "objective": objective, "start_year": start_year, "shrink": shrink, "train_step": train_step,
+        "features": feats, "macro": use_macro, "news": use_news, "fundamentals": use_fund, "sectors": use_sectors, "kronos": use_kronos, "timesfm": use_timesfm, "target": target, "objective": objective, "start_year": start_year, "shrink": shrink, "train_step": train_step,
         "n_tickers": int(panel["ticker"].nunique()), "settings": s}, indent=2, default=str))
 
     if verbose:
@@ -307,6 +318,8 @@ if __name__ == "__main__":
     p.add_argument("--sectors", action="store_true", help="add sector momentum + within-sector ranks")
     p.add_argument("--rank", action="store_true", help="train XGBoost to rank stocks per date (rank:pairwise)")
     p.add_argument("--kronos", action="store_true", help="add Kronos forecasts as features (needs kronos_forecasts.parquet)")
+    p.add_argument("--target", choices=["spy", "sector"], default="spy",
+                   help="what models learn: excess vs SPY (default) or vs the stock's own sector ETF (scored vs SPY either way)")
     p.add_argument("--timesfm", action="store_true", help="add TimesFM forecasts as features (needs timesfm_forecasts.parquet)")
     p.add_argument("--start-year", type=int, help="first test year (e.g. the first year with news coverage)")
     p.add_argument("--n-stocks", type=int, default=60)
@@ -316,4 +329,4 @@ if __name__ == "__main__":
     run(a.data, a.signal, tuple(a.models), a.horizon, a.n_stocks, a.train_step, a.name,
         asset=a.asset, use_macro=a.macro, shrink=not a.no_shrink, use_news=a.news,
         start_year=a.start_year, use_fund=a.fundamentals, use_sectors=a.sectors,
-        objective="rank" if a.rank else "regression", use_kronos=a.kronos, use_timesfm=a.timesfm)
+        objective="rank" if a.rank else "regression", use_kronos=a.kronos, use_timesfm=a.timesfm, target=a.target)

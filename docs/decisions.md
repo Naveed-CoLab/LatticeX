@@ -42,7 +42,8 @@ flowchart LR
 | Random Walk (forecast = 0) | **IN** (baseline) | IC 0 | Every model must beat it |
 | XGBoost regression + shrinkage | **IN** (main model) | IC 0.0140, t 1.80, 11/13 years | Best and most consistent |
 | XGBoost ranking objective (rank:pairwise) | **OUT** | IC 0.0080, t 1.09 | Worse than regression on the same features |
-| Quantile XGBoost + conformal (brackets) | **IN** | 80% coverage 0.801 vs naive 0.773 | Calibrated ranges; beats the naive normal baseline |
+| Quantile XGBoost + conformal (price ranges) | **IN — final on 634 stocks** | 80% range covers 79.8% / 80.3% / 80.2% at 5 / 20 / 60 days (naive 79.3 / 77.5 / 76.5); 90% range 90.0 / 90.4 / 90.8 | Calibrated at every horizon; beats the naive normal baseline. Weak in 2020 (71.5%) |
+| P(up) from the range model | **OUT** | Brier 0.2513 vs base rate 0.2446 (20d); worse at 5d and 60d too; rank IC −0.009 | Does not beat "stocks rose 57% of the time"; extreme values badly wrong. The app shows the historical up-rate as context and the v1.0 rank-group record instead |
 | Kronos-small, zero-shot, alone | **OUT** | IC 0.0087, t 0.81, 7/13 years | Weaker and inconsistent; forecasts too large (RMSE 0.140 vs 0.074) |
 | XGBoost + Kronos forecasts as features | **OUT** | IC 0.0147 vs 0.0140 | +0.0007 is noise (better 6 yrs, worse 5); needs a daily GPU run. Revisit in FYP-2 (ensemble / US fine-tune) |
 | TimesFM 2.5, zero-shot, alone | **OUT** | IC −0.0017, t −0.27, 7/13 years | No skill at ranking stocks: forecasts stay close to "no change" (spread between stocks 1.6%) |
@@ -61,6 +62,18 @@ flowchart LR
 | MLP alone, single seed | replaced | 466: 0.0149 · 634: 0.0192 (t 2.97) | Best on the full universe but weaker on the smaller one: more variable than the weighted ensemble |
 | Regime models | **FYP-2** | — | After the ensemble |
 | Kronos fine-tuned on US stocks | **FYP-2** | — | Pretrained route, ~3 days and uncertain; zero-shot versions did not help |
+
+## v1.1 candidates (being tested; each kept only if it beats v1.0 on the same test years)
+
+| Candidate | Status | What it is | Bar to beat |
+|---|---|---|---|
+| **Crash-risk model** (new output) | **PENDING — Kaggle run** | P(stock falls > 10% within 20 days), XGBoost classifier + isotonic calibration, inputs include raw volatility, beta, run-up, VIX/credit, days since last filing (earnings cycle) | A volatility-only logistic model (risky stocks crash more): must beat it on AUC and Brier skill, and be calibrated |
+| **Sector-neutral target** | **PENDING — Kaggle run** | Models learn "beat your own sector ETF" instead of "beat SPY"; still scored on beating SPY | v1.0 MLP: 5d 0.0136 · 20d 0.0180 · 60d 0.0229 |
+| **Recovery model** (new output) | **PENDING — Kaggle run** | After a crash (drop of 10%+ in 5 days): history table of how often and how fast stocks got back to the pre-drop price (by crash type), plus P(recover within 60 / 20 days) from what is known on the crash day | Base rate and a drop-size-only logistic model; must be calibrated |
+| **Official company news: SEC 8-K events** | **PENDING — download** | Every 8-K since ~2001 with its event type (earnings, restatement, CEO change, write-down, bankruptcy…), time-stamped. Same source gives history (to back-test as features) and a live feed (`--latest`) | Features must beat v1.0; live feed is shown as alerts until then |
+| Insider trading (SEC Form 4) | next | Executives' own buying/selling | v1.0 |
+| Short interest (FINRA) | later | How heavily a stock is bet against | v1.0 |
+| News headlines + sentiment | later | Headlines scored by a language model; no history to back-test yet, so shown as context, not used in the forecast numbers | — |
 
 ## Feature groups
 
@@ -85,7 +98,7 @@ flowchart LR
 | Features ranked across stocks per date | Yes | Removes market-wide level shifts; more stable |
 | Target winsorised 1%/99% | Yes | Extreme moves (takeovers, crashes) otherwise dominate training |
 | Prediction shrinkage | Yes | Scales forecasts to the skill seen in training; avoids overconfident numbers |
-| P(up) calibration | Isotonic, added | Raw P(up) was right 54.7% vs a 57.7% "always up" base rate |
+| P(up) calibration | Isotonic, tried, **dropped with P(up)** | Did not help: calibration years and test years are in different market regimes |
 | Kronos grid | Monthly, 2 samples | Weekly would take ~10 GPU h; monthly forecasts still cover every period |
 
 ## Key finding: pretrained models vs our model
@@ -99,6 +112,16 @@ Two large pretrained forecasting models were tested zero-shot on the same stocks
 | TimesFM 2.5 (general time series) | −0.0017 | −0.27 | no skill |
 
 Each pretrained model sees **one stock's price history at a time**. Our model compares **all stocks on the same day** and adds company fundamentals and sector context. For "which stock will beat the market", the cross-sectional, finance-specific model wins. This matches the finance literature: a single price series alone carries little predictable signal. Pretrained models remain an FYP-2 option (fine-tuning on US stocks, ensembles).
+
+## What v1.0 can honestly claim (measured, 2012–2024)
+
+| Claim | Evidence | OK to say? |
+|---|---|---|
+| "The ranking separates weaker from stronger stocks" | Top 20% beat bottom 20% by 0.11% / 0.40% / 0.80% over 5 / 20 / 60 days, in 12 / 12 / 11 of 13 years | Yes |
+| "Low-ranked stocks tend to lag the market" | Bottom 20% beat SPY only 48.6% / 48.0% / 47.6% of the time | Yes |
+| "Top-ranked stocks beat the market" | Top 20% beat SPY 50.0% / 49.9% / 50.3% of the time | **No** — they roughly match it |
+| "The 80% price range is right 80% of the time" | 79.8% / 80.3% / 80.2% | Yes |
+| "We predict whether a stock goes up" | P(up) lost to the base rate | **No** |
 
 ## Product decisions
 
