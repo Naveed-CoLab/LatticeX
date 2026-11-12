@@ -60,6 +60,24 @@ Run `20261112_1227_real_stock_h20_fund_sect`; combinations in `ensemble_combinat
 
 Correlation of the models' stock rankings: XGBoost–LightGBM 0.86, XGBoost–MLP 0.43, MLP–Ridge 0.55. Combining models that disagree (tree + neural net) is what helps. **Final model: XGBoost + MLP.**
 
+## 3b. Full universe (634 stocks) and ensemble weighting
+
+Run `20261112_1342_real_stock_h20_fund_sect` (634 stocks, 279,757 stock-dates). Comparison in `ensemble_weighting_comparison.csv`.
+
+| Universe | Model | Rank IC | t-stat | Positive years | 2012–17 | 2018–24 |
+|---|---|---|---|---|---|---|
+| 466 stocks | XGBoost | 0.0140 | 1.80 | 11 | 0.0057 | 0.0209 |
+| 466 stocks | MLP | 0.0149 | 1.96 | 10 | 0.0240 | 0.0070 |
+| 466 stocks | Equal-weight XGBoost + MLP | 0.0168 | 2.04 | 11 | 0.0171 | 0.0163 |
+| 466 stocks | **Trust-weighted XGBoost + MLP** | **0.0199** | **2.36** | **12** | 0.0226 | 0.0173 |
+| 634 stocks | XGBoost | 0.0064 | 0.79 | 10 | 0.0003 | 0.0115 |
+| 634 stocks | MLP | 0.0192 | 2.97 | 10 | 0.0262 | 0.0128 |
+| 634 stocks | Equal-weight XGBoost + MLP | 0.0147 | 1.93 | 10 | 0.0147 | 0.0143 |
+| 634 stocks | **Trust-weighted XGBoost + MLP (final)** | **0.0170** | **2.25** | **11** | 0.0240 | 0.0106 |
+
+- On the 125 newly added stocks alone the neural net scores 0.0168 (t 2.0): the skill carries over to stocks it was never tuned on.
+- Note on honesty: several ways of combining the two models were compared on the same test years. The trust-weighted rule was picked because it uses only training-year information and is the most stable across both universes; the locked 2025–26 holdout is the final check.
+
 ## 4. Other horizons (fundamentals + sectors)
 
 | Horizon | Hit rate | Rank IC | IC t-stat |

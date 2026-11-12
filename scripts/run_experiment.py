@@ -208,7 +208,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
             raw = model.predict(test[feats])
             if m == "xgboost" and objective == "rank":
                 raw = raw - pd.Series(raw).groupby(test["date"].values).transform("mean").values
-            trained[m] = (k * raw, raw)
+            trained[m] = (k * raw, raw, k)
             if m == "xgboost":
                 importances.append(model.importance().rename(f.year))
                 shrinks.append({"fold": f.year, "k": k})
@@ -219,10 +219,13 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
             if m == "random_walk":
                 pred = RandomWalk().predict(test)
             elif m in TRAINED:
-                pred, raw = trained[m]
+                pred, raw, _ = trained[m]
             elif m == "ensemble":
-                pred = np.mean([trained[x][0] for x in ENSEMBLE_MEMBERS], axis=0)
-                raw = ensemble_rank([trained[x][1] for x in ENSEMBLE_MEMBERS], test["date"].values)
+                # each member weighted by its trust score k (skill on the latest training years, no test data)
+                ks = np.array([trained[x][2] for x in ENSEMBLE_MEMBERS], dtype=float)
+                wts = ks / ks.sum() if ks.sum() > 0 else np.full(len(ks), 1 / len(ks))
+                pred = np.sum([wt * trained[x][0] for wt, x in zip(wts, ENSEMBLE_MEMBERS)], axis=0)
+                raw = ensemble_rank([trained[x][1] for x in ENSEMBLE_MEMBERS], test["date"].values, weights=ks)
             elif m in ("kronos", "timesfm"):
                 # zero-shot pretrained model used directly: its excess-return forecast IS the prediction (no training)
                 pred = test[f"{m}_raw_5" if h == 5 else f"{m}_raw_20"].fillna(0.0).values

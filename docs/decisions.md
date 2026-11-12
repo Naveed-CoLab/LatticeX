@@ -6,8 +6,8 @@ What we tried, what it scored, and whether it is **in**, **out** or **pending** 
 
 ## Current final model (FYP-1 candidate)
 
-> **Ensemble of XGBoost + neural net (MLP)**, equal-weight rank average, on **price + fundamentals + sector** features, cross-sectional ranks, winsorised target, prediction shrinkage.
-> 20-day rank IC **0.0168** (t **2.04**, first result past the significance bar), positive in **11 / 13** years, equally strong in 2012–17 and 2018–24. Price brackets: **quantile XGBoost + conformal calibration** (80% range covers 80.1%).
+> **Ensemble of XGBoost + neural net (MLP)**, each weighted by its trust score from the latest *training* years, on **price + fundamentals + sector** features, **634 stocks** (Tiingo + Yahoo fill-in), cross-sectional ranks, winsorised target, prediction shrinkage.
+> 20-day rank IC **0.0170** (t **2.25**), positive in **11 / 13** years. On the earlier 466-stock universe the same method scored 0.0199 (t 2.36, 12 / 13 years): it is the best or near-best option on both universes. Price brackets: **quantile XGBoost + conformal calibration** (80% range covers 80.1%).
 
 ```mermaid
 flowchart LR
@@ -17,7 +17,7 @@ flowchart LR
     C -->|ranking objective: 0.0080 ✗| X2[rank objective OUT]
     C -->|+ Kronos: 0.0147, noise ✗| X3[Kronos OUT]
     C -->|+ TimesFM: 0.0128 ✗| X4[TimesFM OUT]
-    C -->|ensemble XGBoost + MLP| E[0.0168 ✓ final]
+    C -->|ensemble XGBoost + MLP, trust-weighted| E[0.0170–0.0199 ✓ final]
     C -->|+ news| P2[deferred to FYP-2]
 ```
 
@@ -39,6 +39,9 @@ flowchart LR
 | Ridge (linear) | **OUT** | IC 0.0042, t 0.41 | Too simple; lowers any ensemble it joins |
 | **Ensemble: XGBoost + MLP** (equal-weight rank average) | **IN — final model** | **IC 0.0168, t 2.04, 11/13 years** | +20% over XGBoost alone, and stable: 0.0171 in 2012–17, 0.0163 in 2018–24 (XGBoost alone: 0.0057 / 0.0209). Members chosen by how *different* their predictions are (correlation, no test outcomes used); equal weights fixed in advance |
 | Ensemble: XGBoost + LightGBM + MLP | OUT | IC 0.0143 | Two near-identical tree models outvote the neural net |
+| Equal-weight XGBoost + MLP | **replaced** | 466 stocks 0.0168 · 634 stocks 0.0147 | On the full universe XGBoost alone fell to 0.0064 and dragged the equal mix down |
+| **Trust-weighted XGBoost + MLP** | **IN — final model** | 466 stocks **0.0199** (t 2.36) · 634 stocks **0.0170** (t 2.25) | Each year, each model's weight = its shrinkage k, i.e. how well it predicted the most recent *training* years. A model that stopped working gets little weight automatically. No test-year data is used. Most stable choice across both universes |
+| MLP alone | not chosen | 466: 0.0149 · 634: 0.0192 (t 2.97) | Best on the full universe but weaker on the smaller one: more variable than the weighted ensemble |
 | Regime models | **FYP-2** | — | After the ensemble |
 | Kronos fine-tuned on US stocks | **FYP-2** | — | Pretrained route, ~3 days and uncertain; zero-shot versions did not help |
 
@@ -94,6 +97,7 @@ Each pretrained model sees **one stock's price history at a time**. Our model co
 | Decision | Why | Effect / plan |
 |---|---|---|
 | Universe = all S&P 500 members since 2000, only while they were members | Avoids survivorship bias | Only 47% of departed stocks have prices → noted as a limitation |
+| Universe expanded 466 → **634 stocks** (Yahoo fill-in) | Commercial product must cover the index; more training examples | XGBoost became unstable (0.0140 → 0.0064); the neural net improved (0.0149 → 0.0192) |
 | Missing 196 tickers (after PCAR) filled from Yahoo Finance instead of paying for Tiingo | Free and immediate; checked against Tiingo on 25 overlapping tickers before use | Some delisted stocks are not on Yahoo → small extra survivorship gap. A commercial launch needs a licensed feed whichever source we use |
 | Fundamentals: first-filed values, usable the day after filing | No look-ahead from restatements or late filings | — |
 | Macro: ALFRED vintages | Uses values as first published | — |

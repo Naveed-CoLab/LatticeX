@@ -1,0 +1,9 @@
+universe,model,rank_ic,ic_tstat_nw,hit_rate,positive_years,ic_2012_2017,ic_2018_2024
+466 stocks (Tiingo A-PCAR),xgboost,0.014,1.8,0.5075,11,0.0057,0.0209
+466 stocks (Tiingo A-PCAR),mlp,0.0149,1.96,0.504,10,0.024,0.007
+466 stocks (Tiingo A-PCAR),equal-weight xgboost+mlp,0.0168,2.04,0.5054,11,0.0171,0.0163
+466 stocks (Tiingo A-PCAR),k-weighted xgboost+mlp (final),0.0199,2.36,0.5061,12,0.0226,0.0173
+634 stocks (full),xgboost,0.0064,0.79,0.5047,10,0.0003,0.0115
+634 stocks (full),mlp,0.0192,2.97,0.5073,10,0.0262,0.0128
+634 stocks (full),equal-weight xgboost+mlp,0.0147,1.93,0.5045,10,0.0147,0.0143
+634 stocks (full),k-weighted xgboost+mlp (final),0.017,2.25,0.505,11,0.024,0.0106

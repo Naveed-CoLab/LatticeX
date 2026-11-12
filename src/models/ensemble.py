@@ -7,8 +7,8 @@
 All features are already cross-sectional ranks in [-0.5, 0.5] (0 = median), so a missing value is
 filled with 0 = "average stock" for the linear and neural models; tree models handle NaN natively.
 
-ensemble_rank(): combines members by averaging each member's per-date rank of its prediction.
-Equal weights, chosen in advance (no tuning on test years), so the ensemble cannot overfit.
+ensemble_rank(): combines members by averaging each member's per-date rank of its prediction, weighted by
+each member's trust score k from the shrinkage step (measured on the latest training years only).
 """
 import os
 
@@ -122,11 +122,16 @@ class MLPForecaster:
         return np.concatenate(out) * self.sd + self.mu
 
 
-def ensemble_rank(raw_preds: list, dates) -> np.ndarray:
-    """Average of each member's per-date percentile rank (centred at 0). Scale-free, equal weights."""
+def ensemble_rank(raw_preds: list, dates, weights=None) -> np.ndarray:
+    """Weighted average of each member's per-date percentile rank (centred at 0). Scale-free.
+    weights: one number per member, e.g. each member's shrinkage k (its skill on the most recent TRAINING
+    years, so no test-year information is used). All zero / None -> equal weights."""
     d = np.asarray(dates)
+    w = np.ones(len(raw_preds)) if weights is None else np.clip(np.asarray(weights, dtype=float), 0, None)
+    w = np.ones(len(raw_preds)) if w.sum() <= 0 else w
+    w = w / w.sum()
     ranks = []
     for p in raw_preds:
         r = pd.Series(p).groupby(d).rank(pct=True)
         ranks.append((r - r.groupby(d).transform("mean")).values)      # centred: average stock = 0 each date
-    return np.mean(ranks, axis=0)
+    return np.average(ranks, axis=0, weights=w)

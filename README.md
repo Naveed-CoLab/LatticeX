@@ -112,7 +112,7 @@ More detail: [`docs/architecture.md`](docs/architecture.md).
 
 ## Results
 
-Walk-forward backtest: 466 S&P 500 stocks, test years 2012–2024, scored weekly (~208,000 stock-dates). The 2025–26 holdout is still locked.
+Walk-forward backtest (first 466, then the full 634 S&P 500 stocks), test years 2012–2024, scored weekly (208,000–280,000 stock-dates). The 2025–26 holdout is still locked.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/ablation_dark.png">
@@ -126,7 +126,9 @@ Walk-forward backtest: 466 S&P 500 stocks, test years 2012–2024, scored weekly
 | + fundamentals | 50.7% | 0.0115 | 1.66 |
 | + fundamentals + sectors | 50.7% | 0.0140 | 1.80 |
 | + ranking objective | 50.3% | 0.0080 | 1.09 |
-| **Ensemble: XGBoost + neural net (final)** | **50.5%** | **0.0168** | **2.04** |
+| Ensemble: XGBoost + neural net, equal weights | 50.5% | 0.0168 | 2.04 |
+| **Ensemble, trust-weighted (final)** | **50.6%** | **0.0199** | **2.36** |
+| **Same final model on the full 634-stock universe** | **50.5%** | **0.0170** | **2.25** |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/rank_ic_by_year_dark.png">

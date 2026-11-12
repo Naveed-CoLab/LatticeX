@@ -335,6 +335,8 @@ def test_ensemble_rank_is_scale_free():
     e = ensemble_rank([p1, p2], d)
     assert np.allclose(e, ensemble_rank([p1], d))
     assert np.allclose(pd.Series(e).groupby(d).mean().values, 0.0)
+    assert np.allclose(ensemble_rank([p1, -p1], d, weights=[1, 0]), ensemble_rank([p1], d))   # weight 0 = ignored
+    assert np.allclose(ensemble_rank([p1, -p1], d, weights=[0, 0]), 0.0)                      # all 0 -> equal
 
 
 @pytest.mark.slow

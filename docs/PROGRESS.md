@@ -150,6 +150,12 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 
 ## Work log (newest first)
 
+### 12 Nov 2026 (full universe results)
+- Full universe run (634 stocks, 279,757 stock-dates): XGBoost 0.0064 (t 0.79, unstable) · **MLP 0.0192 (t 2.97)** · equal-weight ensemble 0.0147 (t 1.93).
+- MLP holds up on the 125 new stocks alone (0.0168, t 2.0). XGBoost's trust score k is 0 in several early years → noisy.
+- New ensemble rule: weight each model by its shrinkage k (skill on latest training years). Trust-weighted XGBoost + MLP: **0.0199 (t 2.36, 12/13) on 466 stocks, 0.0170 (t 2.25, 11/13) on 634 stocks** → most stable → **final model**. Code: `ensemble_rank(weights=...)`; test added (25 tests).
+- Next: 5/60-day horizons + price brackets on the full universe, then the daily forecast job + dashboard.
+
 ### 12 Nov 2026 (Yahoo fill-in)
 - 196 universe tickers were never downloaded (Tiingo free cap stopped at PCAR): 133 still members (PEP, PG, UNH, V, WMT, XOM, …), 63 left the index.
 - Free alternative instead of Tiingo upgrade: `src/ingest/yahoo.py` (yfinance) writes the same raw format as Tiingo, rebuilds raw prices from Yahoo's split-adjusted ones, cuts to Tiingo's date range per ticker. `--check` compares Yahoo vs Tiingo on 25 tickers first. Test added (split handling).
