@@ -36,7 +36,7 @@ from src.features.sector import SECTOR_FEATURES, sector_features
 from src.features.news import NEWS_FEATURES, news_features
 from src.features.price import FEATURES as PRICE_FEATURES, price_features
 from src.folds import eval_dates, make_folds
-from src.models.ensemble import LGBMForecaster, MLPForecaster, RidgeForecaster, ensemble_rank
+from src.models.ensemble import LGBMForecaster, MLPSeeds, RidgeForecaster, ensemble_rank
 from src.models.random_walk import RandomWalk
 from src.models.xgb_model import XGBForecaster
 from src.targets import make_targets, transform_target
@@ -122,7 +122,7 @@ def make_model(name: str, s: dict, objective: str = "regression"):
     if name == "lightgbm":
         return LGBMForecaster()
     if name == "mlp":
-        return MLPForecaster()
+        return MLPSeeds()
     if name == "ridge":
         return RidgeForecaster()
     raise ValueError(name)
@@ -147,7 +147,7 @@ def fit_shrunk(name: str, train: pd.DataFrame, y_col: str, feats: list, s: dict,
     cut = pd.Timestamp(dates[int(len(dates) * 0.8)])
     inner_end = cut - pd.offsets.BDay(s["folds"]["embargo_days"])
     inner, val = train[train["date"] <= inner_end], train[train["date"] >= cut]
-    k = 1.0
+    k, val_ic = 1.0, float("nan")
     if len(inner) > 1000 and len(val) > 200:
         m = make_model(name, s, objective).fit(inner[feats], transform_target(inner, y_col, how),
                                                dates=inner["date"].values)
@@ -156,8 +156,12 @@ def fit_shrunk(name: str, train: pd.DataFrame, y_col: str, feats: list, s: dict,
             p = p - pd.Series(p).groupby(val["date"].values).transform("mean").values
         k = float(np.dot(p, y) / max(np.dot(p, p), 1e-12))
         k = max(k, 0.0) if (how == "rank" or objective == "rank") else min(max(k, 0.0), 1.0)
+        # ranking skill on the held-out latest training years (mean per-date Spearman); used as ensemble weight
+        v = pd.DataFrame({"d": val["date"].values, "p": p, "y": y})
+        val_ic = float(v.groupby("d")[["p", "y"]].apply(lambda g: g["p"].rank().corr(g["y"].rank())).mean())
     model = make_model(name, s, objective).fit(train[feats], transform_target(train, y_col, how),
                                                dates=train["date"].values)
+    model.val_ic = val_ic
     return model, k
 
 
@@ -208,24 +212,24 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
             raw = model.predict(test[feats])
             if m == "xgboost" and objective == "rank":
                 raw = raw - pd.Series(raw).groupby(test["date"].values).transform("mean").values
-            trained[m] = (k * raw, raw, k)
+            trained[m] = (k * raw, raw, k, getattr(model, "val_ic", float("nan")))
             if m == "xgboost":
                 importances.append(model.importance().rename(f.year))
-                shrinks.append({"fold": f.year, "k": k})
-            else:
-                shrinks.append({"fold": f.year, "k": k, "model": m})
+            shrinks.append({"fold": f.year, "k": k, "model": m, "val_ic": trained[m][3]})
         for m in models:
             raw = None
             if m == "random_walk":
                 pred = RandomWalk().predict(test)
             elif m in TRAINED:
-                pred, raw, _ = trained[m]
+                pred, raw = trained[m][0], trained[m][1]
             elif m == "ensemble":
-                # each member weighted by its trust score k (skill on the latest training years, no test data)
-                ks = np.array([trained[x][2] for x in ENSEMBLE_MEMBERS], dtype=float)
-                wts = ks / ks.sum() if ks.sum() > 0 else np.full(len(ks), 1 / len(ks))
+                # each member weighted by its RANKING skill on the latest training years (val_ic > 0 only);
+                # no test-year data is used. Both <= 0 -> equal weights.
+                ics = np.array([trained[x][3] for x in ENSEMBLE_MEMBERS], dtype=float)
+                ics = np.where(np.isfinite(ics), np.clip(ics, 0, None), 0.0)
+                wts = ics / ics.sum() if ics.sum() > 0 else np.full(len(ics), 1 / len(ics))
                 pred = np.sum([wt * trained[x][0] for wt, x in zip(wts, ENSEMBLE_MEMBERS)], axis=0)
-                raw = ensemble_rank([trained[x][1] for x in ENSEMBLE_MEMBERS], test["date"].values, weights=ks)
+                raw = ensemble_rank([trained[x][1] for x in ENSEMBLE_MEMBERS], test["date"].values, weights=wts)
             elif m in ("kronos", "timesfm"):
                 # zero-shot pretrained model used directly: its excess-return forecast IS the prediction (no training)
                 pred = test[f"{m}_raw_5" if h == 5 else f"{m}_raw_20"].fillna(0.0).values
@@ -238,7 +242,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
             all_preds.append(base.assign(model=m, y_pred=pred, y_raw=raw if raw is not None else pred))
         if verbose:
             ks = [x for x in shrinks if x["fold"] == f.year]
-            k_txt = (", shrink k " + " ".join(f"{x.get('model', 'xgboost')}={x['k']:.2f}" for x in ks)) if ks else ""
+            k_txt = (", k / val IC " + " ".join(f"{x['model']}={x['k']:.2f}/{x['val_ic']:+.3f}" for x in ks)) if ks else ""
             print(f"  fold {f.year}: train to {f.train_end.date()} ({len(train):,} rows), "
                   f"test {len(test):,} rows{k_txt}  [{time.time() - t0:.0f}s]")
 
@@ -277,7 +281,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
             verdict = "better than" if r["dm_stat"] < 0 and r["p_value"] < 0.05 else "NOT significantly better than"
             print(f"Diebold-Mariano {m} vs random_walk: stat {r['dm_stat']:.2f}, p={r['p_value']:.3f} -> {verdict} Random Walk")
         if shrinks:
-            sk = pd.DataFrame(shrinks).fillna({"model": "xgboost"}) if "model" in pd.DataFrame(shrinks) else pd.DataFrame(shrinks).assign(model="xgboost")
+            sk = pd.DataFrame(shrinks)
             print("Average shrink k: " + ", ".join(f"{m} {v:.2f}" for m, v in sk.groupby("model")["k"].mean().items())
                   + "  (0 = no trust in the model, 1 = full trust)")
         if importances:

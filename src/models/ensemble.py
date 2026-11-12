@@ -122,6 +122,23 @@ class MLPForecaster:
         return np.concatenate(out) * self.sd + self.mu
 
 
+class MLPSeeds:
+    """Average of several MLPs that differ only in their random seed: same idea as a forest of trees,
+    removes the luck of one training run (a neural net's result depends on its random start)."""
+    name = "mlp"
+
+    def __init__(self, seeds=(42, 43, 44), **kw):
+        self.members = [MLPForecaster(seed=sd, **kw) for sd in seeds]
+
+    def fit(self, X: pd.DataFrame, y, dates=None) -> "MLPSeeds":
+        for m in self.members:
+            m.fit(X, y, dates)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return np.mean([m.predict(X) for m in self.members], axis=0)
+
+
 def ensemble_rank(raw_preds: list, dates, weights=None) -> np.ndarray:
     """Weighted average of each member's per-date percentile rank (centred at 0). Scale-free.
     weights: one number per member, e.g. each member's shrinkage k (its skill on the most recent TRAINING

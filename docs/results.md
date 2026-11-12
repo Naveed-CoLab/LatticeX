@@ -78,7 +78,17 @@ Run `20261112_1342_real_stock_h20_fund_sect` (634 stocks, 279,757 stock-dates). 
 - On the 125 newly added stocks alone the neural net scores 0.0168 (t 2.0): the skill carries over to stocks it was never tuned on.
 - Note on honesty: several ways of combining the two models were compared on the same test years. The trust-weighted rule was picked because it uses only training-year information and is the most stable across both universes; the locked 2025–26 holdout is the final check.
 
-## 4. Other horizons (fundamentals + sectors)
+## 3c. All horizons on the full universe (634 stocks), trust-weighted ensemble v1
+
+| Horizon | Run | XGBoost | MLP | Ensemble (k-weighted) |
+|---|---|---|---|---|
+| 5 days | `20261112_1409_real_stock_h5_fund_sect` | 0.0099 (t 1.69) | 0.0112 (t 2.20) | **0.0120 (t 2.10)** |
+| 20 days | `20261112_1342_real_stock_h20_fund_sect` | 0.0064 (t 0.79) | **0.0192 (t 2.97)** | 0.0170 (t 2.25) |
+| 60 days | `20261112_1422_real_stock_h60_fund_sect` | 0.0087 (t 0.82) | **0.0254 (t 2.81)**, hit 51.5% | 0.0161 (t 1.72) |
+
+On the full universe XGBoost is weak at every horizon, and weighting by k (a calibration slope) still gave it too much say at 20 and 60 days. → Ensemble v2 (below): weights from each model's *ranking* skill on the latest training years, and 3 MLP seeds averaged.
+
+## 4. Other horizons (earlier, 466 stocks, XGBoost only) (fundamentals + sectors)
 
 | Horizon | Hit rate | Rank IC | IC t-stat |
 |---|---|---|---|

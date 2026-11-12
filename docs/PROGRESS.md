@@ -150,6 +150,12 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 
 ## Work log (newest first)
 
+### 12 Nov 2026 (horizons + ensemble v2)
+- 5d: XGB 0.0099 · MLP 0.0112 · ensemble 0.0120 (t 2.10). 60d: XGB 0.0087 · **MLP 0.0254 (t 2.81, hit 51.5%)** · ensemble 0.0161 (t 1.72).
+- Lesson: on 634 stocks XGBoost is weak at all horizons; k-weights (calibration slope) still gave it ~half the vote.
+- **Ensemble v2 (final, pre-declared):** weights = each model's rank IC on the held-out latest training years (`val_ic`, clipped at 0); MLP = mean of 3 seeds (`MLPSeeds`). Synthetic check OK, 25 tests pass. Logged k and val_ic per fold in shrink.csv.
+- Next: one final run for 5/20/60 days → **lock the model** with those numbers, whatever they are.
+
 ### 12 Nov 2026 (full universe results)
 - Full universe run (634 stocks, 279,757 stock-dates): XGBoost 0.0064 (t 0.79, unstable) · **MLP 0.0192 (t 2.97)** · equal-weight ensemble 0.0147 (t 1.93).
 - MLP holds up on the 125 new stocks alone (0.0168, t 2.0). XGBoost's trust score k is 0 in several early years → noisy.
