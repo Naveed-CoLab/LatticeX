@@ -128,7 +128,8 @@ Walk-forward backtest (first 466, then the full 634 S&P 500 stocks), test years 
 | + ranking objective | 50.3% | 0.0080 | 1.09 |
 | Ensemble: XGBoost + neural net, equal weights | 50.5% | 0.0168 | 2.04 |
 | **Ensemble, trust-weighted (final)** | **50.6%** | **0.0199** | **2.36** |
-| **Same final model on the full 634-stock universe** | **50.5%** | **0.0170** | **2.25** |
+| **v1.0 locked — neural net (3 seeds), full 634 stocks, 20-day** | **50.6%** | **0.0180** | **2.66** |
+| v1.0, 5-day / 60-day | 50.5% / 51.3% | 0.0136 / 0.0229 | 2.63 / 2.39 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/rank_ic_by_year_dark.png">

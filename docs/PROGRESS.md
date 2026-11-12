@@ -7,7 +7,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 
 ## Where we are (one-line status)
 
-**Stage A (collect data) ~85% · Stage B (dataset) ~95% · Stage C (models) ~60% · App 0%.**
+**Stage A (data) ~95% · Stage B (dataset) 100% · Stage C (models) ~90% — v1.0 locked · App 0%.**
 Data, features, leakage tests, walk-forward evaluation, XGBoost, price brackets and Kronos forecasts are done. Now: Kronos comparison run (queued on Kaggle), TimesFM, then lock the final model and build the dashboard.
 
 | Stage (design doc) | Status |
@@ -149,6 +149,11 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 ---
 
 ## Work log (newest first)
+
+### 12 Nov 2026 — 🔒 MODEL LOCKED: LatticeIQ v1.0
+- Final run (634 stocks): MLP 3-seed **5d 0.0136 (t 2.63) · 20d 0.0180 (t 2.66) · 60d 0.0229 (t 2.39, hit 51.3%)**; ensemble v2 0.0135 / 0.0159 / 0.0176; XGBoost 0.0099 / 0.0064 / 0.0087.
+- **v1.0 = 3-seed MLP** (primary) — significant at every horizon. Ensemble v2 kept as secondary. Deviation from the pre-declared ensemble written up openly in `decisions.md`; both get the one-time holdout test.
+- Next: price brackets on 634 stocks (3 horizons), then `forecast_today` job + Streamlit app. Accuracy work continues as v1.1+ (sector-neutral target, insider trading, short interest).
 
 ### 12 Nov 2026 (horizons + ensemble v2)
 - 5d: XGB 0.0099 · MLP 0.0112 · ensemble 0.0120 (t 2.10). 60d: XGB 0.0087 · **MLP 0.0254 (t 2.81, hit 51.5%)** · ensemble 0.0161 (t 1.72).

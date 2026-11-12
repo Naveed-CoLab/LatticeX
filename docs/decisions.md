@@ -4,7 +4,21 @@ What we tried, what it scored, and whether it is **in**, **out** or **pending** 
 
 **Rule for every decision:** a component stays only if it improves rank IC on the walk-forward test years 2012–2024 *consistently* (in most years, not just on average). Everything is measured on the same 466 stocks, the same weekly dates and the same metrics. The 2025–26 holdout is never used for decisions.
 
-## Current final model (FYP-1 candidate)
+## Locked model — LatticeIQ v1.0 (12 Nov 2026)
+
+> **Neural net (MLP), average of 3 seeds**, on **price + fundamentals + sector** features (46), **634 S&P 500 stocks**, cross-sectional ranks, winsorised target, prediction shrinkage. One model per horizon.
+
+| Horizon | Rank IC | t-stat | Hit rate | Run |
+|---|---|---|---|---|
+| 5 days | **0.0136** | **2.63** | 50.5% | `20261112_1525_real_stock_h5_fund_sect` |
+| 20 days | **0.0180** | **2.66** | 50.6% | `20261112_1541_real_stock_h20_fund_sect` |
+| 60 days | **0.0229** | **2.39** | 51.3% | `20261112_1558_real_stock_h60_fund_sect` |
+
+Significant (t > 2) at every horizon. Secondary model, also scored on the holdout: ensemble v2 (5d 0.0135, 20d 0.0159, 60d 0.0176).
+
+**Why the MLP and not the pre-declared ensemble v2 — stated openly.** Ensemble v2 was declared final before its run. Its results were good, but the 3-seed MLP alone was better at all three horizons in that run, and the single-seed MLP was also better than every ensemble at 20 and 60 days in the two runs before. That is 6 out of 6 comparisons on the full universe: XGBoost adds noise there (rank IC 0.006–0.010, t < 1.7). Choosing after seeing results is a mild form of test-set selection, so both models are kept and both will be scored once on the locked 2025–26 holdout; the MLP is the primary.
+
+## Earlier candidate (before the full universe)
 
 > **Ensemble of XGBoost + neural net (MLP)**, each weighted by its trust score from the latest *training* years, on **price + fundamentals + sector** features, **634 stocks** (Tiingo + Yahoo fill-in), cross-sectional ranks, winsorised target, prediction shrinkage.
 > 20-day rank IC **0.0170** (t **2.25**), positive in **11 / 13** years. On the earlier 466-stock universe the same method scored 0.0199 (t 2.36, 12 / 13 years): it is the best or near-best option on both universes. Price brackets: **quantile XGBoost + conformal calibration** (80% range covers 80.1%).
@@ -42,8 +56,9 @@ flowchart LR
 | Equal-weight XGBoost + MLP | **replaced** | 466 stocks 0.0168 · 634 stocks 0.0147 | On the full universe XGBoost alone fell to 0.0064 and dragged the equal mix down |
 | **Trust-weighted XGBoost + MLP** | **IN — final model** | 466 stocks **0.0199** (t 2.36) · 634 stocks **0.0170** (t 2.25) | Each year, each model's weight = its shrinkage k, i.e. how well it predicted the most recent *training* years. A model that stopped working gets little weight automatically. No test-year data is used. Most stable choice across both universes |
 | Ensemble weights = k (v1) | **replaced by v2** | 5d 0.0120 · 20d 0.0170 · 60d 0.0161 | k measures size calibration, not ranking skill: XGBoost kept ~40–60% weight at 20/60 days while ranking poorly |
-| **Ensemble v2: weights = ranking skill (rank IC) on the latest training years; MLP = average of 3 seeds** | **PENDING — final run** | — | Same idea, but the weight measures what the product needs (ordering stocks). Seed-averaging removes the luck of one neural-net training run. Decided before seeing its test results; whatever it scores is locked |
-| MLP alone | not chosen | 466: 0.0149 · 634: 0.0192 (t 2.97) | Best on the full universe but weaker on the smaller one: more variable than the weighted ensemble |
+| Ensemble v2: weights = ranking skill (rank IC) on the latest training years; MLP = average of 3 seeds | **secondary** | 5d 0.0135 (t 2.37) · 20d 0.0159 (t 1.99) · 60d 0.0176 (t 1.69) | Same idea, but the weight measures what the product needs (ordering stocks). Seed-averaging removes the luck of one neural-net training run. Decided before seeing its test results; whatever it scores is locked |
+| **MLP, average of 3 seeds** | **IN — v1.0 primary** | 5d 0.0136 (t 2.63) · 20d 0.0180 (t 2.66) · 60d 0.0229 (t 2.39) | Best at every horizon on 634 stocks; seed averaging made it steadier (single seed: 0.0112 / 0.0192 / 0.0254) |
+| MLP alone, single seed | replaced | 466: 0.0149 · 634: 0.0192 (t 2.97) | Best on the full universe but weaker on the smaller one: more variable than the weighted ensemble |
 | Regime models | **FYP-2** | — | After the ensemble |
 | Kronos fine-tuned on US stocks | **FYP-2** | — | Pretrained route, ~3 days and uncertain; zero-shot versions did not help |
 

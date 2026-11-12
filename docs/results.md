@@ -88,6 +88,16 @@ Run `20261112_1342_real_stock_h20_fund_sect` (634 stocks, 279,757 stock-dates). 
 
 On the full universe XGBoost is weak at every horizon, and weighting by k (a calibration slope) still gave it too much say at 20 and 60 days. → Ensemble v2 (below): weights from each model's *ranking* skill on the latest training years, and 3 MLP seeds averaged.
 
+## 3d. Final run — v1.0 (634 stocks, all horizons)
+
+| Horizon | XGBoost | **MLP, 3 seeds (v1.0)** | Ensemble v2 (rank-skill weights) |
+|---|---|---|---|
+| 5 days | 0.0099 (t 1.69) | **0.0136 (t 2.63)**, hit 50.5% | 0.0135 (t 2.37) |
+| 20 days | 0.0064 (t 0.79) | **0.0180 (t 2.66)**, hit 50.6% | 0.0159 (t 1.99) |
+| 60 days | 0.0087 (t 0.82) | **0.0229 (t 2.39)**, hit 51.3% | 0.0176 (t 1.69) |
+
+Runs `20261112_1525_…h5`, `20261112_1541_…h20`, `20261112_1558_…h60`. Why the MLP is primary: [`decisions.md`](decisions.md#locked-model--latticeiq-v10-12-nov-2026).
+
 ## 4. Other horizons (earlier, 466 stocks, XGBoost only) (fundamentals + sectors)
 
 | Horizon | Hit rate | Rank IC | IC t-stat |
