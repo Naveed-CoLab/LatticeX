@@ -150,6 +150,16 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 
 ## Work log (newest first)
 
+### 12 Nov 2026 (Yahoo fill-in)
+- 196 universe tickers were never downloaded (Tiingo free cap stopped at PCAR): 133 still members (PEP, PG, UNH, V, WMT, XOM, …), 63 left the index.
+- Free alternative instead of Tiingo upgrade: `src/ingest/yahoo.py` (yfinance) writes the same raw format as Tiingo, rebuilds raw prices from Yahoo's split-adjusted ones, cuts to Tiingo's date range per ticker. `--check` compares Yahoo vs Tiingo on 25 tickers first. Test added (split handling).
+- `--check` ✅: 18 overlapping tickers compared: median daily-return correlation **0.9999**, only 0.08% of days differ by >0.5%, raw close ratio 1.0000 (split rebuild correct). Two tickers lower (FITB 0.945, MDLZ 0.981) from a handful of outlier days, which the cleaning step (`align_to_calendar`: blank one-day moves > ×5) handles. 7 sampled tickers not on Yahoo (delisted / acquired). Result file: `results/data_check_yahoo_vs_tiingo.csv`.
+- Download: 141 tickers from Yahoo, total **641 tickers** in prices.parquet. 54 not on Yahoo: mostly delisted/acquired (PXD, TWTR, XLNX, RTN, TIF…), plus some current names that timed out (STX, STZ, likely UPS, STT, SEE) → retry added (3 attempts).
+- Found recycled symbols (Yahoo gives a newer company: S = SentinelOne not Sprint, STI, SE, POM, SUN, SII, SPLS, UN, SNDK, TT…). Added `prune()`: a Yahoo history that starts >30 days after the stock joined the index is set aside in `data/raw/prices/_rejected/` (+ known case TT). Test added.
+- Retry run: STT, STX, STZ, UPS recovered. 50 not on Yahoo (delisted/acquired: PXD, TWTR, XLNX, RTN, TIF, WBA, X…; current-looking SEE, SNV, TGNA likely taken over in 2025–26).
+- Recycled check set aside 12: POM, QRVO, S, SE, SII, SNDK, SPLS, STI, SUN, TT, UN, plus SPGI by mistake → grace period 30 → 400 days (all real cases are 3+ years late), `--prune` now re-checks earlier rejects. **633 tickers** (≈615 stocks + 18 ETFs) vs 484 before.
+- Next: re-upload, then re-upload data and re-run the ensemble on the full universe.
+
 ### 12 Nov 2026 (ensemble results)
 - Real-data run: XGBoost 0.0140 (t 1.80) · LightGBM 0.0080 · **MLP 0.0149 (t 1.96)** · Ridge 0.0042 · 3-model ensemble 0.0143.
 - Re-combined the saved predictions: **XGBoost + MLP = IC 0.0168, t 2.04, 11/13 years**, stable across 2012–17 (0.0171) and 2018–24 (0.0163). LightGBM ranks 86% like XGBoost (redundant); MLP only 43% → real diversification.

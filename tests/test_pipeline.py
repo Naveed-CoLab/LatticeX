@@ -350,3 +350,42 @@ def test_ensemble_finds_signal_and_not_noise():
     t = noise["metrics"].set_index("model")
     for m in models[1:]:
         assert t.loc[m, "ic_tstat_nw"] < 2.5, m          # no 'skill' on pure noise
+
+
+def test_yahoo_rebuilds_raw_prices_around_splits():
+    """Yahoo 'Close' is split-adjusted; we must rebuild the raw traded price like Tiingo's 'close'."""
+    from src.ingest.yahoo import to_tiingo_format
+    idx = pd.bdate_range("2020-01-01", periods=6)
+    raw_close = np.array([100, 102, 51, 52, 26, 27.0])            # 2:1 split on day 3, 2:1 again on day 5
+    splits = np.array([0, 0, 2, 0, 2, 0.0])
+    later = np.array([4, 4, 2, 2, 1, 1.0])                         # splits after each day
+    y = pd.DataFrame({"Open": raw_close / later, "High": raw_close / later, "Low": raw_close / later,
+                      "Close": raw_close / later, "Adj Close": raw_close / later * 0.99,
+                      "Volume": 1000 * later, "Dividends": 0.0, "Stock Splits": splits}, index=idx)
+    out = to_tiingo_format(y, "TEST")
+    assert np.allclose(out["close"], raw_close)
+    assert np.allclose(out["volume"], 1000)                        # raw shares traded
+    assert list(out["splitFactor"]) == [1, 1, 2, 1, 2, 1]
+    assert set(out.columns) >= {"date", "open", "high", "low", "close", "volume", "adjClose", "adjVolume",
+                                "divCash", "splitFactor", "ticker", "source"}
+
+
+def test_yahoo_prune_sets_aside_recycled_symbols(tmp_path):
+    """'S' = Sprint in the index from 2000, but Yahoo's 'S' history starts 2021 (SentinelOne) -> rejected."""
+    from src.ingest.yahoo import prune
+    def f(t, start, src):
+        pd.DataFrame({"date": pd.bdate_range(start, periods=50).strftime("%Y-%m-%dT00:00:00.000Z"),
+                      "adjClose": 1.0, "source": src}).to_parquet(tmp_path / f"{t}.parquet")
+    f("S", "2021-06-30", "yahoo")         # recycled
+    f("PEP", "2000-01-03", "yahoo")       # fine
+    f("V", "2008-03-19", "yahoo")         # IPO 2008, joined index 2009 -> fine
+    f("OLD", "2015-01-02", "tiingo")      # Tiingo files are never touched
+    f("SPGI", "2001-01-02", "yahoo")      # history starts 1 year after our data window -> fine
+    u = pd.DataFrame({"ticker": ["S", "PEP", "V", "OLD", "SPGI"],
+                      "start": pd.to_datetime(["2000-01-01", "2000-01-01", "2009-12-21", "2000-01-01", "2000-01-01"]),
+                      "end": pd.NaT})
+    moved = prune(tmp_path, u)
+    assert [m.split()[0] for m in moved] == ["S"]
+    assert (tmp_path / "_rejected" / "S.parquet").exists() and (tmp_path / "PEP.parquet").exists()
+    assert (tmp_path / "OLD.parquet").exists() and (tmp_path / "SPGI.parquet").exists()
+    assert [m.split()[0] for m in prune(tmp_path, u)] == ["S"]   # re-running is stable (restores, re-checks)

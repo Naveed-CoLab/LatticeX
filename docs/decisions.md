@@ -94,7 +94,7 @@ Each pretrained model sees **one stock's price history at a time**. Our model co
 | Decision | Why | Effect / plan |
 |---|---|---|
 | Universe = all S&P 500 members since 2000, only while they were members | Avoids survivorship bias | Only 47% of departed stocks have prices → noted as a limitation |
-| Universe stops at tickers A–PCAR (466 stocks) | Tiingo free plan: 500 symbols/month | Full ~680 in FYP-2 |
+| Missing 196 tickers (after PCAR) filled from Yahoo Finance instead of paying for Tiingo | Free and immediate; checked against Tiingo on 25 overlapping tickers before use | Some delisted stocks are not on Yahoo → small extra survivorship gap. A commercial launch needs a licensed feed whichever source we use |
 | Fundamentals: first-filed values, usable the day after filing | No look-ahead from restatements or late filings | — |
 | Macro: ALFRED vintages | Uses values as first published | — |
 | Data never committed to GitHub | Tiingo/Benzinga licences | Rebuilt with scripts (`data/README.md`) |

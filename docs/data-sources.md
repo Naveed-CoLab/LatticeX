@@ -5,6 +5,7 @@ No data is stored in this repository. Every dataset is rebuilt by a script (see 
 | Data | Source | Script | Output | Key needed | Licence / notes |
 |---|---|---|---|---|---|
 | Daily prices (OHLCV, adjusted) | [Tiingo](https://www.tiingo.com) | `src/ingest/tiingo.py` | `data/clean/prices.parquet` (~80 MB) | `TIINGO_API_KEY` | Not redistributable → never committed. Free plan: 500 symbols/month |
+| Daily prices, fill-in (tickers after PCAR) | Yahoo Finance via `yfinance` | `src/ingest/yahoo.py` | same `data/raw/prices/` files, `source = yahoo` | — | Research use only. Checked against Tiingo first (`--check`); raw prices rebuilt from split-adjusted ones; cut to Tiingo's date range per ticker |
 | S&P 500 membership history | [fja05680/sp500](https://github.com/fja05680/sp500) | `scripts/build_universe.py` | `config/universe.csv` | — | Public; membership start/end dates per ticker |
 | Macro (VIX, yields, credit spread, CPI, unemployment) | [FRED / ALFRED](https://fred.stlouisfed.org) | `src/ingest/fred.py` | `data/clean/macro.parquet` | `FRED_API_KEY` | Public; vintages used so values are as first released |
 | Company fundamentals | [SEC EDGAR XBRL](https://www.sec.gov/edgar) companyfacts | `src/ingest/edgar.py` | `data/clean/fundamentals.parquet` | `SEC_USER_AGENT` (name + email) | Public; first-filed values with filing dates |
@@ -14,7 +15,7 @@ No data is stored in this repository. Every dataset is rebuilt by a script (see 
 ## Universe
 
 - `config/universe.csv`: 695 tickers (677 stocks that were ever in the S&P 500 since 2000, plus 18 ETFs: SPY and sector ETFs).
-- Prices found for **466 stocks + 18 ETFs**. The Tiingo free monthly cap stopped the download at tickers A–PCAR; the rest are planned for FYP-2.
+- Prices found for **466 stocks + 18 ETFs** from Tiingo (free monthly cap stopped at A–PCAR). The other **196** (133 still listed as members, 63 that left the index) are filled from Yahoo Finance where available.
 - `config/universe_report.csv` lists every member and whether Tiingo had its prices.
 
 ## Known gaps (stated in the report)
