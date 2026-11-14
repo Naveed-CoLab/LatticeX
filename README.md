@@ -44,6 +44,11 @@ For every S&P 500 stock on a given day, LatticeIQ produces:
 | **Official company news** *(in testing)* | SEC 8-K events (earnings, restatements, executive changes…) as a live feed |
 | **Drivers** | Which features pushed the forecast |
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/forecast_card_dark.png">
+  <img alt="Example forecast: a candlestick chart with volume, a shaded 50/80/90% price cone for the next 20 trading days, and a panel with rank, expected return vs the market, price ranges and main drivers" src="docs/assets/forecast_card_light.png" width="100%">
+</picture>
+
 ## Results at a glance
 
 Walk-forward backtest on the corrected S&P 500 membership list: **727 stocks, test years 2012–2024, about 298,000 weekly forecasts**. For each test year the model is retrained only on earlier data, with a 60-day gap. The 2025–26 holdout is still locked.
@@ -182,6 +187,11 @@ On 12 Nov 2026 a bug was found: the stock list had been frozen at the January 20
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bracket_coverage_dark.png">
   <img alt="80% range coverage by year for LatticeIQ vs a naive normal model" src="docs/assets/bracket_coverage_light.png" width="100%">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/horizons_dark.png">
+  <img alt="Average width of the 80% price range for a 100 dollar stock: plus or minus 4.7% over 5 days, 9.9% over 20 days, 17.6% over 60 days; the real price fell inside about 80% of the time at each horizon" src="docs/assets/horizons_light.png" width="100%">
 </picture>
 
 **Price ranges** (earlier 634-stock list): the 80% range contained the real price 79.8% / 80.3% / 80.2% of the time at 5 / 20 / 60 days (naive normal model: 79.3% / 77.5% / 76.5%), and the 90% range 90.0% / 90.4% / 90.8% (naive: 87.5% / 86.6% / 86.0%).

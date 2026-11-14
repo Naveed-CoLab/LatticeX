@@ -156,6 +156,7 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 - README rewritten to the current state: corrected-list results first, "what we claim / don't claim" table, market comparison, 44 features, data-honesty section (index coverage, wrong-company audit), 33 tests, roadmap without stale items. Charts regenerated (rank IC by year now shows v1.0 on the corrected list).
 - `docs/results.md`: new section 0 with the corrected-list tables, by-year values and validation vs test. `docs/decisions.md`: v1.0 re-measured table added.
 - Run summaries saved in `results/20261113_*` (copied from the Kaggle logs).
+- README images: new hero banner (candles, volume, forecast cone), an example forecast card and a "how wide the ranges are" strip (light and dark). Candles are synthetic and labelled so; the range widths (±4.7% / ±9.9% / ±17.6%) are measured. Up/down candle colours checked for colour-blind separation.
 - Universe v2 rebuilt on the PC: 819 tickers, 801 stocks, 737 with price files; audit clean ("trading volume far below other members: none").
 - **Next:** `upload-data` → final v1.0 run on universe v2 → price ranges → add-on tests. Goal for every add-on: make the top-ranked group beat the market, not only the bottom group lag.
 
