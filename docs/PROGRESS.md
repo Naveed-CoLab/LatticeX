@@ -90,7 +90,8 @@ Daily automation (later): Windows Task Scheduler, weekdays ~2 pm PT → Tiingo +
 - [x] `timesfm --years 2010 2024` ✅: 239,117 weekly forecasts, 23 GPU min
 - [x] TimesFM comparison ✅: alone IC −0.0017; + XGBoost 0.0128 < 0.0140 → OUT
 - [ ] TimesFM 2.5 zero-shot (same pattern) → comparison row
-- [ ] FYP-2: fine-tune Kronos on US stocks 2000–2017 (our own US-only Kronos)
+- [ ] FinText finance-pretrained Chronos-Small (yearly versions): runner + Kaggle job + comparison vs v1.0 (after the universe rebuild)
+- [x] ~~Fine-tune Kronos on US stocks~~ dropped 13 Nov (evidence: fine-tuning general models barely helps; see decisions.md)
 - [ ] EDGAR fundamentals ingest (first-filed values, TTM) → fundamental features
 - [x] Code: Benzinga news ingest → FinBERT on Kaggle → news features (`--news`)
 - [x] Price brackets code (run on real data: `python -m scripts.kaggle_cloud brackets "--data real"`)
@@ -149,6 +150,70 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 ---
 
 ## Work log (newest first)
+
+### 14 Nov 2026 (market comparison + README brought up to date)
+- New `docs/market-comparison.md`: what competitors publish (Danelfin +14.69%/yr for top scores and +376% vs +166% backtest; Prospero.ai 54% win rate; AltIndex 70% win rate, all self-reported or backtested), what research reports (51.74% next-day direction for the best finance-pretrained model), where we stand, why the numbers are not comparable, a checklist for reading accuracy claims, and what LatticeIQ can and cannot claim. Sources listed.
+- README rewritten to the current state: corrected-list results first, "what we claim / don't claim" table, market comparison, 44 features, data-honesty section (index coverage, wrong-company audit), 33 tests, roadmap without stale items. Charts regenerated (rank IC by year now shows v1.0 on the corrected list).
+- `docs/results.md`: new section 0 with the corrected-list tables, by-year values and validation vs test. `docs/decisions.md`: v1.0 re-measured table added.
+- Run summaries saved in `results/20261113_*` (copied from the Kaggle logs).
+- Universe v2 rebuilt on the PC: 819 tickers, 801 stocks, 737 with price files; audit clean ("trading volume far below other members: none").
+- **Next:** `upload-data` → final v1.0 run on universe v2 → price ranges → add-on tests. Goal for every add-on: make the top-ranked group beat the market, not only the bottom group lag.
+
+### 14 Nov 2026 (v1.0 re-measured on the corrected stock list, before the six audit drops)
+- Kaggle run v15 finished (727 stocks, 2.72 M rows, 3 × ~18 min). Runs `20261113_1855_…h5`, `20261113_1914_…h20`, `20261113_1932_…h60`.
+
+| 3-seed MLP (v1.0) | Old list (634 stocks, frozen at Jan 2019) | Corrected list (727 stocks) | Positive years |
+|---|---|---|---|
+| 5 days | IC 0.0136, t 2.63, hit 50.5% | **IC 0.0141, t 2.84, hit 50.4%** | 11 of 13 (2021 flat, 2023 negative) |
+| 20 days | IC 0.0180, t 2.66, hit 50.6% | **IC 0.0192, t 2.95, hit 50.6%** | 12 of 13 (2024 negative) |
+| 60 days | IC 0.0229, t 2.39, hit 51.3% | **IC 0.0202, t 2.23, hit 51.0%** | 9 of 13 (2013, 2015, 2017, 2024 negative) |
+
+- Ensemble v2: 0.0137 (t 2.48) / 0.0175 (t 2.30) / 0.0130 (t 1.26). XGBoost alone: 0.0092 / 0.0086 / 0.0033. MLP stays the best single model at all three horizons.
+- Reading: the skill did not come from the wrong stock list. 5 and 20 days are slightly stronger on the true index, 60 days slightly weaker and less steady. **2024, the most recent test year, is negative at 20 and 60 days**: to be watched on the final run and the holdout.
+- This run still contains the six wrong-company spells (LSI in 2012–14). Final v1.0 numbers = the next run on "universe v2".
+
+### 13 Nov 2026 (universe audit, part 2: impostor histories → data freeze "universe v2")
+- Hand fixes applied on the PC (WEN, CSR dropped; CPWR left out of SEC data): 822 tickers, 740 stocks with prices; audit table unchanged (91% of true members in test years).
+- Went through the audit's hand-check list and added a new automatic check: **dollar trading volume of each spell vs other members of the same years**. Real members sit at 0.06–10× the typical member; five spells sit below 0.05: KMG (Kerr-McGee's symbol, KMG Chemicals' prices), CSR, MIL (Millipore's symbol, a small fund's prices), WEN and **LSI (LSI Logic's symbol, Life Storage's prices, 2000–May 2014)**. Plus GAS 2000–11 (Nicor's symbol, AGL Resources' prices; found from the missing July-2002 crash).
+- LSI is the only one inside test years (1 stock of ~405, 2012–May 2014). All six spells now dropped in `build_universe.py`; check added to `audit_universe.py` (33 tests pass).
+- Decision: **freeze the data as "universe v2" after this**; re-run v1.0 once more on it so every headline number comes from one audited data set. The run started earlier today (Kaggle v15, before these drops) is kept as a before/after check.
+
+### 13 Nov 2026 (universe audit)
+- MRVL / NAVI / FTI earlier registrations confirmed by name (Marvell Technology Group, Navient, FMC Technologies) ✅. Fundamentals 1,246,413 values; 8-K 201,884 filings. Data uploaded to Kaggle.
+- New `scripts/audit_universe.py` (33 tests pass): checks every membership spell against the price files and counts true index members with prices per year. **Coverage of the real index: test years 2012–2024 81% → 98% (average 91%); training years before 2012 average 67%.** Table in `docs/data-sources.md`.
+- Audit findings: 18 spells have a price file that belongs to a later company (no prices inside the membership dates → harmless, simply absent). Three cases where the history under the symbol is another company's, fixed by hand: WEN 2000–08 (Triarc's prices), CSR 2000 (Centerspace) → spells dropped in `build_universe`; CPWR fundamentals (a penny stock's filings) → left out. All three only touch training years before 2012, never test years.
+- Corrected an earlier note: JCI / CB / PLD before their mergers carry the merger partner's prices **and** fundamentals (the legal survivor), so the series is consistent; the absorbed company is what is missing.
+- The v1.0 re-run started today was launched before the three hand fixes; they change < 0.3% of training rows. Later runs include them, and every add-on test runs its own v1.0 baseline in the same job.
+
+### 13 Nov 2026 (universe rebuild: company data done)
+- `yahoo --prune`: 13 files set aside (10 wrong-company + 3 one-row stubs KVUE, WBD, QRVO) → **774 tickers** in `prices.parquet`.
+- `build_universe`: 1,066 members since 2000, 1,108 spells; `universe.csv` 824 tickers; **742 stocks with prices** (was 634), 64 without (53 not on Yahoo, 8 wrong-company, 3 stubs).
+- Fundamentals re-downloaded for all 806 stocks: **634 companies, 1,242,870 values**; 172 not matched. 8-K events: **201,179 filings, 634 companies**.
+- All 12 earlier SEC registrations checked by name: Exxon, Disney (TWDC), Google, Cigna, Medtronic, BlackRock, Xerox, Apache, Eaton, Broadcom/Avago, ICE ✅.
+- Found while reading the output and fixed in code (32 tests pass): (1) SEC's ticker list maps an old symbol to today's owner of that symbol → a symbol whose registrant keeps filing 400+ days after the stock's prices ended is now left out; (2) 3 more companies changed SEC number (MRVL, NAVI, FTI) → earlier registration added, and every earlier registration is now accepted only if its SEC name matches.
+- Known and written down, not fixed yet (`docs/data-sources.md`): JCI / CB / PLD carry the merger partner's fundamentals before their merger dates; Mylan history not joined to VTRS.
+- **Next:** refresh MRVL NAVI FTI → `upload-data` → re-run v1.0 (5/20/60d) + price ranges.
+
+### 13 Nov 2026 (universe rebuild: prices done)
+- Yahoo fill-in finished for the corrected stock list: **776 tickers, 4,225,730 rows** in `prices.parquet` (was 634 stocks + ETFs). New: TSLA, META, MRNA, UBER, PLTR, NOW, PANW, CRWD and ~110 more.
+- **53 not on Yahoo** (taken over / delisted, e.g. TWX, TWTR, WFM, RTN, XLNX, PXD, WBA, X, TIF, PX): still missing → survivorship gap stays, to be stated with the final coverage numbers.
+- 11 wrong-company (recycled) files set aside as before (S, STI, SE, POM, SUN, SII, SPLS, UN, QRVO, PARA, SBNY).
+- Found 2 **stub files** (KVUE, WBD: one row each, companies delisted in Oct 2026 and Yahoo removed their history). Fix: files with < 20 rows are now skipped at download and set aside by `--prune` (test added; 31 tests pass).
+- PC problem solved: Windows **Smart App Control** blocked pyarrow 26.0.1 ("Application Control policy has blocked this file"). pyarrow 22.0.0 loads → pinned `pyarrow>=15,<23` in `requirements.txt`. Do not upgrade pyarrow on this PC.
+- **Next:** `yahoo --prune` → `build_universe` (final coverage) → fundamentals + 8-K for new tickers → `upload-data` → re-run v1.0 (5/20/60d) + price ranges, old vs new side by side.
+
+### 13 Nov 2026 (open-source model survey)
+- Searched Hugging Face + recent papers for the best open-source model to fine-tune. Full table in `docs/decisions.md` → "Open-source model survey".
+- **Pick: FinText finance-pretrained Chronos-Small** (Apache-2.0; trained from scratch on US daily excess returns; one version per year 2000–2023, so test year Y uses the version trained to Y−1, no look-ahead). Second: Chronos-2 (Apache-2.0). Optional: TabICL v2 (BSD-3) as a third ensemble member.
+- Ruled out by licence: TabPFN-2.5, Moirai 2.0 (non-commercial), TiRex (custom licence). Ruled out by evidence: fine-tuning Kronos/TimesFM ourselves (paper 2511.18578: fine-tuning general models on stock returns barely helps; pre-training on finance data is what helps).
+- **Next (after the universe rebuild):** `fintext` Kaggle job (same pattern as Kronos/TimesFM) → forecasts as features → compare with v1.0 on the same folds.
+
+### 12 Nov 2026 — ⚠ DATA ERROR FOUND AND FIXED IN CODE: membership list stopped in Jan 2019
+- SEC 8-K history downloaded: 169,811 filings, 494 companies (44,227 earnings). Live feed `--latest 7` works (145 filings, 2 important).
+- Checking it exposed a bug in `build_universe.py`: `sorted(...)[-1]` picked "…Changes.csv" (ends 2019-01-11) over "…Changes (Updated).csv" (to 2026-08-18). Consequences: no post-2019 entrants (TSLA, MRNA, UBER, PLTR, NOW… ~150), Jan-2019 members treated as members to 2026, renamed tickers (FB→META, ANTM→ELV, HCP→DOC, ~30) lost from the rename date, and three confirmed wrong-company price series inside membership dates (EP 2011–12 = Empire Petroleum, LB 2024 = LandBridge, HCP 2021–25 = HashiCorp; APC 2026, FB 2025 in the holdout period).
+- No look-ahead was involved; 2012–2018 test years used the right list; 2019–2024 used the frozen Jan-2019 list.
+- **Fixes (31 tests pass):** build_universe uses the Updated file + refuses a file > 400 days old; `RENAMES` (31 renames + IR→TT before Mar 2020) joined into continuous spells; spells rejected when the symbol's prices start > 400 days late and run on 3+ years after the stock left; Yahoo recycled check is now per spell; `PREDECESSOR_CIKS` for 12 re-incorporated companies in both SEC downloaders; date-parsing warnings fixed.
+- **Next:** rebuild universe → Yahoo fill-in (~170 tickers) → fundamentals + 8-K for new tickers → re-upload → re-run v1.0 (3 horizons) and price ranges on the corrected universe; report old vs new side by side. 8-K features after that.
 
 ### 12 Nov 2026 (price ranges final; P(up) rejected; plain-number check of v1.0)
 - **Price ranges on 634 stocks ✅ final:** 80% coverage 0.798 / 0.803 / 0.802 and 90% coverage 0.900 / 0.904 / 0.908 at 5 / 20 / 60 days; beats naive at all horizons. 2020 weak (0.715).

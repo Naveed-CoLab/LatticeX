@@ -15,6 +15,14 @@ Outputs:
 How matching works: an index member is "covered" if Tiingo has the same symbol AND Tiingo's
 price history overlaps the dates it was in the index. If Tiingo's history for that symbol starts
 after the member left the index, the symbol was reused by another company -> not covered.
+
+Fixed 12 Nov 2026 (the old version silently used a membership file that stopped in January 2019):
+  1. Uses the repo's "(Updated)" file, which runs to the present, and refuses a file older than ~1 year.
+  2. Ticker renames (FB -> META, ANTM -> ELV, ...) are joined into ONE continuous membership under the
+     newest ticker, because price vendors keep the whole history under the newest ticker.
+  3. A finished membership spell is rejected when the symbol's prices start more than 400 days after the
+     stock joined the index and keep going for 3+ years after it left: that is another company using the
+     old symbol (EP = El Paso in the index, Empire Petroleum in the price data).
 """
 import io
 import re
@@ -33,6 +41,55 @@ ETFS = ["SPY", "QQQ", "IWM", "DIA", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "X
         "XLU", "XLV", "XLY", "TLT", "GLD", "VNQ"]
 
 
+# Same company, new ticker (old -> new), from the repo's change log + company announcements. Chains are followed.
+RENAMES = {
+    "HRS": "LHX", "DWDP": "DD", "TMK": "GL", "BHGE": "BKR", "HCP": "PEAK", "PEAK": "DOC", "SYMC": "NLOK",
+    "NLOK": "GEN", "CBS": "VIAC", "VIAC": "PARA", "BBT": "TFC", "JEC": "J", "UTX": "RTX", "ARNC": "HWM",
+    "CTL": "LUMN", "MYL": "VTRS", "LB": "BBWI", "COG": "CTRA", "WLTW": "WTW", "DISCA": "WBD", "BLL": "BALL",
+    "FB": "META", "ANTM": "ELV", "PKI": "RVTY", "FI": "FISV", "RE": "EG", "ABC": "COR", "CDAY": "DAY",
+    "FLT": "CPAY", "MMC": "MRSH", "BK": "BNY",
+}
+# Renames that only apply before a date: until March 2020 "IR" was Ingersoll-Rand plc, which became Trane
+# Technologies (TT); after that "IR" is a different company (the former Gardner Denver).
+RENAMES_BEFORE = [("IR", "TT", "2020-03-03")]
+# Spells to drop by hand: (ticker, any spell starting before this date). The price history under the symbol
+# is ANOTHER company's (data vendors show a reused symbol's history as the latest owner's), and no rule on
+# dates can tell. Found by scripts/audit_universe.py (trading volume far below other members) and by checking
+# price levels against the member's known prices:
+#   TT   before 2010 was Trane Inc., a different company from today's TT.
+#   WEN  2000-2008 was Wendy's International; the history under WEN is Triarc's (the buyer, not a member).
+#   CSR  in 2000 was Central & South West; the history is Centerspace's (a small REIT).
+#   KMG  2000-2006 was Kerr-McGee; the history is KMG Chemicals' (a $4 stock).
+#   MIL  2000-2010 was Millipore; the history is a small fund's.
+#   LSI  2000-2014 was LSI Logic (about $11 when Avago bought it); the history is Life Storage's ($76).
+#   GAS  2000-2011 was Nicor; the history is AGL Resources', which took the symbol and the index seat in
+#        Dec 2011 (its later spell is correct and kept).
+DROP_SPELLS = [("TT", "2010-01-01"), ("WEN", "2009-01-01"), ("CSR", "2001-01-01"), ("KMG", "2007-01-01"),
+               ("MIL", "2011-01-01"), ("LSI", "2015-01-01"), ("GAS", "2011-06-01")]
+
+
+def final_ticker(t: str) -> str:
+    seen = set()
+    while t in RENAMES and t not in seen:
+        seen.add(t)
+        t = RENAMES[t]
+    return t
+
+
+def apply_renames(hist: pd.DataFrame) -> pd.DataFrame:
+    """Rewrite every daily member list with the newest ticker of each company."""
+    out = []
+    for d, s in zip(hist["date"], hist["tickers"]):
+        m = set()
+        for t in (x.strip() for x in str(s).split(",") if x.strip()):
+            for old, new, before in RENAMES_BEFORE:
+                if t == old and d < pd.Timestamp(before):
+                    t = new
+            m.add(final_ticker(t))
+        out.append(",".join(sorted(m)))
+    return hist.assign(tickers=out)
+
+
 def download_sp500_history() -> pd.DataFrame:
     files = requests.get(GITHUB_API, timeout=60).json()
     if not isinstance(files, list):
@@ -41,7 +98,8 @@ def download_sp500_history() -> pd.DataFrame:
                         if f["name"].startswith("S&P 500 Historical Components") and f["name"].endswith(".csv"))
     if not candidates:
         raise RuntimeError("Could not find the history CSV in fja05680/sp500. Check the repo and update this script.")
-    name = candidates[-1]
+    updated = [c for c in candidates if "updated" in c.lower()]
+    name = updated[-1] if updated else candidates[-1]     # plain sorting used to pick the old 2019 file
     url = next(f["download_url"] for f in files if f["name"] == name)
     print(f"Downloading {name}")
     raw = requests.get(url, timeout=120).text
@@ -49,6 +107,11 @@ def download_sp500_history() -> pd.DataFrame:
     df = pd.read_csv(io.StringIO(raw))
     df.columns = [c.strip().lower() for c in df.columns]
     df["date"] = pd.to_datetime(df["date"])
+    age = (pd.Timestamp.today() - df["date"].max()).days
+    print(f"Membership history: {df['date'].min():%Y-%m-%d} to {df['date'].max():%Y-%m-%d} ({len(df):,} dated lists)")
+    if age > 400:
+        raise RuntimeError(f"The membership file ends {df['date'].max():%Y-%m-%d} ({age} days ago): too old. "
+                           "Check github.com/fja05680/sp500 for the current file name.")
     return df
 
 
@@ -103,12 +166,20 @@ def match(iv: pd.DataFrame, tiingo: pd.DataFrame) -> pd.DataFrame:
     iv.loc[overlap, "status"] = "covered"
     full = overlap & (iv["t_start"] <= iv["start"] + np.timedelta64(10, "D"))
     iv.loc[overlap & ~full, "status"] = "covered (partial history)"
+    # another company using an old symbol: the stock LEFT the index, its symbol's prices start long after it
+    # joined AND keep going for years after it left. (A current member with a late price start is kept:
+    # today's symbol is today's member, e.g. the new Fox Corp from 2019.)
+    late = overlap & (iv["t_start"] > iv["start"] + np.timedelta64(400, "D"))
+    goes_on = iv["end"].notna() & (iv["t_end"].fillna(pd.Timestamp.today()) > iv["end"] + np.timedelta64(1095, "D"))
+    iv.loc[late & goes_on, "status"] = "symbol reused (prices start late)"
+    for t, before in DROP_SPELLS:
+        iv.loc[(iv["ticker"] == t) & (iv["start"] < pd.Timestamp(before)), "status"] = "dropped by hand (different company)"
     return iv
 
 
 def main() -> None:
     s = load_settings()
-    hist = download_sp500_history()
+    hist = apply_renames(download_sp500_history())
     iv = to_intervals(hist, s["start_date"])
     tiingo = download_tiingo_tickers()
     rep = match(iv, tiingo)
@@ -132,7 +203,15 @@ def main() -> None:
     print(f"Left the index since 2000: {gone.sum()} spells, "
           f"{(rep.loc[gone, 'status'].str.startswith('covered')).mean():.0%} covered   <- survivorship-bias check")
     print(f"\nSaved config/universe.csv ({uni['ticker'].nunique()} tickers) and config/universe_report.csv")
-    print("Next: python -m src.ingest.tiingo")
+    have = {f.stem for f in (path("raw") / "prices").glob("*.parquet")} if (path("raw") / "prices").exists() else set()
+    need = sorted(set(stocks["ticker"]) - have)
+    print(f"Price files already on disk: {len(set(stocks['ticker']) & have)}; still to download: {len(need)}")
+    if need:
+        print("  " + " ".join(need))
+    bad = rep[rep["status"].str.contains("reused|by hand")]
+    print(f"Rejected as another company's symbol: {bad['ticker'].nunique()} tickers "
+          f"({', '.join(sorted(bad['ticker'].unique())[:60])})")
+    print("Next: python -m src.ingest.yahoo   (free; fills every ticker that has no price file yet)")
 
 
 if __name__ == "__main__":

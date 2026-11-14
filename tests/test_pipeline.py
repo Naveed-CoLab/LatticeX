@@ -375,22 +375,28 @@ def test_yahoo_rebuilds_raw_prices_around_splits():
 def test_yahoo_prune_sets_aside_recycled_symbols(tmp_path):
     """'S' = Sprint in the index from 2000, but Yahoo's 'S' history starts 2021 (SentinelOne) -> rejected."""
     from src.ingest.yahoo import prune
-    def f(t, start, src):
-        pd.DataFrame({"date": pd.bdate_range(start, periods=50).strftime("%Y-%m-%dT00:00:00.000Z"),
+    def f(t, start, src, n=50):
+        pd.DataFrame({"date": pd.bdate_range(start, periods=n).strftime("%Y-%m-%dT00:00:00.000Z"),
                       "adjClose": 1.0, "source": src}).to_parquet(tmp_path / f"{t}.parquet")
     f("S", "2021-06-30", "yahoo")         # recycled
     f("PEP", "2000-01-03", "yahoo")       # fine
     f("V", "2008-03-19", "yahoo")         # IPO 2008, joined index 2009 -> fine
     f("OLD", "2015-01-02", "tiingo")      # Tiingo files are never touched
     f("SPGI", "2001-01-02", "yahoo")      # history starts 1 year after our data window -> fine
-    u = pd.DataFrame({"ticker": ["S", "PEP", "V", "OLD", "SPGI"],
-                      "start": pd.to_datetime(["2000-01-01", "2000-01-01", "2009-12-21", "2000-01-01", "2000-01-01"]),
-                      "end": pd.NaT})
+    f("FOXA", "2019-03-12", "yahoo")      # current member, new company from 2019 -> kept (today's symbol)
+    f("SNDK", "2025-02-13", "yahoo")      # old spell 2006-16 can't match, new spell from 2025 does -> kept
+    f("KVUE", "2026-10-30", "yahoo", n=1)  # delisted: Yahoo keeps one stub row -> set aside even though "current"
+    u = pd.DataFrame({"ticker": ["S", "PEP", "V", "OLD", "SPGI", "FOXA", "SNDK", "SNDK", "KVUE"],
+                      "start": pd.to_datetime(["2000-01-01", "2000-01-01", "2009-12-21", "2000-01-01", "2000-01-01",
+                                               "2004-12-20", "2006-04-20", "2025-11-28", "2023-08-25"]),
+                      "end": pd.to_datetime(["2013-07-09", None, None, None, None, None, "2016-05-12", None, None])})
     moved = prune(tmp_path, u)
-    assert [m.split()[0] for m in moved] == ["S"]
+    assert [m.split()[0] for m in moved] == ["KVUE", "S"]
+    assert (tmp_path / "_rejected" / "KVUE.parquet").exists()
     assert (tmp_path / "_rejected" / "S.parquet").exists() and (tmp_path / "PEP.parquet").exists()
     assert (tmp_path / "OLD.parquet").exists() and (tmp_path / "SPGI.parquet").exists()
-    assert [m.split()[0] for m in prune(tmp_path, u)] == ["S"]   # re-running is stable (restores, re-checks)
+    assert (tmp_path / "FOXA.parquet").exists() and (tmp_path / "SNDK.parquet").exists()
+    assert [m.split()[0] for m in prune(tmp_path, u)] == ["KVUE", "S"]   # re-running is stable (restores, re-checks)
 
 
 @pytest.mark.slow
@@ -469,3 +475,66 @@ def test_sec_events_parse_8k_items():
     assert df.loc[2, "severity"] == 0 and str(df["accepted"].dt.tz) == "UTC"
     assert describe("4.02,5.02").startswith("earlier financial reports")   # most serious first
     assert describe("9.01") == "routine filing"
+
+
+def test_universe_renames_and_recycled_symbols():
+    """FB -> META becomes one continuous spell; a symbol whose prices start years late and run on after the
+    stock left the index is rejected; a current member with a late price start is kept."""
+    import scripts.build_universe as B
+    hist = pd.DataFrame({"date": pd.to_datetime(["2014-01-02", "2022-06-08", "2022-06-09", "2024-01-02"]),
+                         "tickers": ["FB,EP,IR,AAA", "FB,IR,AAA", "META,IR,AAA,TT", "META,IR,AAA,TT,FOXA"]})
+    iv = B.to_intervals(B.apply_renames(hist), "2000-01-01")
+    meta = iv[iv["source_ticker"] == "META"]
+    assert len(meta) == 1 and pd.isna(meta["end"].iloc[0]) and meta["start"].iloc[0] == pd.Timestamp("2014-01-02")
+    assert "FB" not in set(iv["source_ticker"])
+    assert set(iv["source_ticker"]) >= {"TT", "IR"}                 # IR before Mar 2020 counted as TT
+    assert iv[iv["source_ticker"] == "TT"]["start"].min() == pd.Timestamp("2014-01-02")
+    tiingo = pd.DataFrame({"ticker": ["META", "EP", "AAA", "FOXA"],
+                           "startDate": pd.to_datetime(["2012-05-18", "2018-02-01", "2000-01-03", "2023-06-01"]),
+                           "endDate": pd.to_datetime(["2026-11-05"] * 4)})
+    hist2 = pd.DataFrame({"date": pd.to_datetime(["2014-01-02", "2019-06-03", "2024-01-02"]),
+                          "tickers": ["FB,EP,AAA,FOXA", "FB,AAA,FOXA", "META,AAA,FOXA"]})
+    st = B.match(B.to_intervals(B.apply_renames(hist2), "2000-01-01"), tiingo).set_index("ticker")["status"]
+    assert st["META"] == "covered" and st["AAA"] == "covered"
+    assert st["EP"].startswith("symbol reused")        # left in 2019; its symbol's prices start 2018 and run to 2026
+    assert st["FOXA"] == "covered (partial history)"   # current member whose prices start late: kept
+
+
+def test_sec_matches_guard_against_reused_symbols_and_wrong_predecessors():
+    """A symbol whose SEC registrant keeps filing years after the stock's prices ended belongs to another
+    company today; and a predecessor number is only used if the SEC name matches."""
+    from src.ingest.edgar import predecessor_ok, reused_sec_tickers
+    filed = pd.Series(pd.to_datetime(["2026-10-30", "2026-11-01", "2014-11-05", "2026-08-01"]),
+                      index=["CPWR", "AAPL", "OLDCO", "NOPX"])
+    price = pd.Series(pd.to_datetime(["2014-12-15", "2026-11-11", "2014-12-01"]), index=["CPWR", "AAPL", "OLDCO"])
+    assert reused_sec_tickers(filed, price) == ["CPWR"]          # no prices (NOPX) -> left alone
+    price["CPWR"] = pd.Timestamp("2026-11-05")                    # price file continues under the reused symbol
+    assert reused_sec_tickers(filed, price) == ["CPWR"]          # still left out: listed in SEC_WRONG_COMPANY
+    assert predecessor_ok(1001039, "TWDC Enterprises 18 Corp.") and predecessor_ok(1001039, "WALT DISNEY CO/")
+    assert predecessor_ok(1135152, "FMC TECHNOLOGIES INC") and not predecessor_ok(1135152, "Some Other Corp")
+    assert predecessor_ok(999, "anything")                        # no expectation recorded -> allowed
+
+
+def test_universe_audit_counts_members_with_prices():
+    """Survivorship check: a member with no prices lowers the yearly coverage; a spell whose price file starts
+    after the spell ended (later company under the same symbol) has zero coverage."""
+    from scripts.audit_universe import coverage_by_year, relative_volume, spell_coverage
+    days = pd.bdate_range("2001-01-02", "2003-12-31")
+    px = pd.concat([pd.DataFrame({"ticker": "AAA", "date": days}),
+                    pd.DataFrame({"ticker": "OLD", "date": pd.bdate_range("2003-07-01", "2003-12-31")})])
+    u = pd.DataFrame({"ticker": ["AAA", "OLD"], "start": pd.to_datetime(["2000-01-01", "2000-01-01"]),
+                      "end": pd.to_datetime([None, "2002-12-31"])})
+    rep = pd.concat([u, pd.DataFrame({"ticker": ["GONE"], "start": pd.to_datetime(["2000-01-01"]),
+                                      "end": pd.to_datetime([None])})])
+    sc = spell_coverage(u, px).set_index("ticker")["coverage"]
+    assert sc["AAA"] > 0.7 and sc["OLD"] == 0
+    cy = coverage_by_year(rep, u, px).set_index("year")
+    assert cy.loc[2002, "index_members"] == 3 and cy.loc[2002, "with_prices"] == 1    # OLD has no prices yet, GONE never
+    assert cy.loc[2003, "index_members"] == 2 and cy.loc[2003, "with_prices"] == 1
+    # an impostor history trades a tiny fraction of what real members trade
+    pv = pd.concat([pd.DataFrame({"ticker": t, "date": days, "close": 50.0, "volume": v})
+                    for t, v in [("AAA", 2e6), ("BBB", 3e6), ("CCC", 1e6), ("TINY", 1e3)]])
+    uv = pd.DataFrame({"ticker": ["AAA", "BBB", "CCC", "TINY"], "start": pd.to_datetime(["2000-01-01"] * 4),
+                       "end": pd.to_datetime([None] * 4)})
+    rv = relative_volume(uv, pv).set_index("ticker")["rel_volume"]
+    assert rv["TINY"] < 0.05 and rv[["AAA", "BBB", "CCC"]].min() > 0.3

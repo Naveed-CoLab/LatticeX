@@ -24,7 +24,7 @@ import time
 import pandas as pd
 
 from src.config import ROOT, path
-from src.ingest.edgar import _get, cik_map
+from src.ingest.edgar import PREDECESSOR_CIKS, _get, cik_map, predecessor_ok, reused_sec_tickers
 
 SUB_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 OLDER_URL = "https://data.sec.gov/submissions/{name}"
@@ -71,7 +71,7 @@ def parse_block(block: dict, ticker: str, cik: int) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=["ticker", "cik", "form", "filed", "accepted", "items", "accession", "severity"]
                       + [f"ev_{k}" for k in KINDS])
     df["filed"] = pd.to_datetime(df["filed"], errors="coerce")
-    df["accepted"] = pd.to_datetime(df["accepted"], errors="coerce", utc=True)
+    df["accepted"] = pd.to_datetime(df["accepted"], errors="coerce", utc=True, format="ISO8601")
     return df
 
 
@@ -82,28 +82,38 @@ def describe(items: str) -> str:
 
 
 def fetch(ticker: str, cik: int, full: bool = True) -> pd.DataFrame:
-    r = _get(SUB_URL.format(cik=cik))
-    if r.status_code == 404:
+    parts = []
+    ciks = [cik] + (PREDECESSOR_CIKS.get(ticker, []) if full else [])
+    for n, c in enumerate(ciks):
+        r = _get(SUB_URL.format(cik=c))
+        if r.status_code == 404:
+            continue
+        r.raise_for_status()
+        j = r.json()
+        if n:                                          # earlier registrant of the same business
+            if not predecessor_ok(c, j.get("name", "?")):
+                continue
+            print(f"      + earlier registrant CIK {c}: {j.get('name', '?')}")
+        parts.append(parse_block(j.get("filings", {}).get("recent", {}), ticker, c))
+        if full:                                       # older filings live in extra files
+            for f in j.get("filings", {}).get("files", []):
+                time.sleep(0.12)
+                rr = _get(OLDER_URL.format(name=f["name"]))
+                if rr.status_code == 200:
+                    parts.append(parse_block(rr.json(), ticker, c))
+        time.sleep(0.12)
+    if not parts:
         return pd.DataFrame()
-    r.raise_for_status()
-    j = r.json()
-    parts = [parse_block(j.get("filings", {}).get("recent", {}), ticker, cik)]
-    if full:                                           # older filings live in extra files
-        for f in j.get("filings", {}).get("files", []):
-            time.sleep(0.12)
-            rr = _get(OLDER_URL.format(name=f["name"]))
-            if rr.status_code == 200:
-                parts.append(parse_block(rr.json(), ticker, cik))
     df = pd.concat([p for p in parts if len(p)], ignore_index=True) if any(len(p) for p in parts) else parts[0]
     return df.drop_duplicates("accession").sort_values("filed")
 
 
-def download(tickers: list) -> None:
+def download(tickers: list, force: bool = False) -> None:
     out = path("raw") / "sec_events"
     out.mkdir(parents=True, exist_ok=True)
     nf_file = out / "_not_found.txt"
     not_found = set(nf_file.read_text().split()) if nf_file.exists() else set()
-    todo = [t for t in tickers if not (out / f"{t}.parquet").exists() and t not in not_found]
+    todo = [t for t in tickers if force or (not (out / f"{t}.parquet").exists() and t not in not_found)]
     print(f"{len(tickers)} stocks, {len(todo)} to download")
     if not todo:
         return
@@ -129,6 +139,10 @@ def combine() -> pd.DataFrame:
     if not files:
         raise SystemExit("Nothing downloaded yet.")
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    bad = reused_sec_tickers(df.groupby("ticker")["filed"].max())
+    if bad:
+        print(f"Symbol now used by another company at the SEC ({len(bad)}), left out: {' '.join(bad)}")
+        df = df[~df["ticker"].isin(bad)]
     out = path("clean") / "sec_events.parquet"
     df.to_parquet(out, index=False)
     print(f"Saved {len(df):,} 8-K filings for {df['ticker'].nunique()} companies, "
@@ -141,7 +155,7 @@ def combine() -> pd.DataFrame:
 def latest(tickers: list, days: int = 7) -> pd.DataFrame:
     """LIVE feed: re-read each company's most recent filings and list the 8-Ks of the last `days` days."""
     ciks = cik_map()
-    since = pd.Timestamp.now(tz="UTC").normalize() - pd.Timedelta(days=days)
+    since = pd.Timestamp.now(tz="UTC").normalize() - pd.to_timedelta(days, unit="D")
     parts = []
     for t in tickers:
         if t in ciks:
@@ -179,7 +193,7 @@ if __name__ == "__main__":
     else:
         if not a.combine:
             try:
-                download(tickers)
+                download(tickers, force=bool(a.tickers))   # tickers named on the command line are re-downloaded
             except KeyboardInterrupt:
                 print("\nStopped; finished companies are saved. Run again to continue.")
         combine()

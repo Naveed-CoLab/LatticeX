@@ -1,6 +1,39 @@
 # Results
 
-All results are walk-forward backtests: 466 S&P 500 stocks, test years 2012–2024, scored weekly (~650 dates, ~208,000 stock-dates). The 2025–26 holdout has not been touched. Raw files: [`../results/`](../results/).
+All results are walk-forward backtests on S&P 500 stocks, test years 2012–2024, scored weekly (~650 dates). The 2025–26 holdout has not been touched. Raw files: [`../results/`](../results/).
+
+> **Which stock list each table uses.** Section 0 is measured on the **corrected S&P 500 list** (727 stocks, 13 Nov 2026). Every later section was measured earlier, on a list whose membership was frozen at January 2019 (bug in `build_universe.py`, see [`decisions.md`](decisions.md)); those tables are kept as the record of how the model was chosen. Price ranges and rank-group figures are being re-run on the corrected list.
+
+## 0. v1.0 on the corrected stock list (13 Nov 2026)
+
+727 stocks, 2.72 million stock-days, 44 features (price and volume 17, fundamentals 15, sector 12), about 298,000 weekly test forecasts. Runs `20261113_1855_…h5`, `20261113_1914_…h20`, `20261113_1932_…h60`. These runs were made before six wrong-company price histories were removed (one of them, LSI, inside test years 2012–14); the final "universe v2" run replaces them.
+
+| Model | 5 days | 20 days | 60 days |
+|---|---|---|---|
+| **Neural net, 3 seeds (v1.0)**: rank IC (t) | **0.0141 (2.84)** | **0.0192 (2.95)** | **0.0202 (2.23)** |
+| v1.0 hit rate | 50.4% | 50.6% | 51.0% |
+| v1.0 positive years | 11 of 13 | 12 of 13 | 9 of 13 |
+| Ensemble v2 (XGBoost + neural net): rank IC (t) | 0.0137 (2.48) | 0.0175 (2.30) | 0.0130 (1.26) |
+| XGBoost alone: rank IC (t) | 0.0092 (1.61) | 0.0086 (1.11) | 0.0033 (0.31) |
+
+Old list vs corrected list, v1.0 rank IC: 0.0136 → 0.0141 (5 days), 0.0180 → 0.0192 (20 days), 0.0229 → 0.0202 (60 days).
+
+v1.0 rank IC by test year:
+
+| Year | 2012 | 2013 | 2014 | 2015 | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 5 days | 0.006 | 0.026 | 0.041 | 0.011 | 0.007 | 0.016 | 0.013 | 0.006 | 0.029 | 0.000 | 0.028 | −0.007 | 0.006 |
+| 20 days | 0.034 | 0.010 | 0.058 | 0.005 | 0.032 | 0.026 | 0.014 | 0.003 | 0.025 | 0.005 | 0.031 | 0.014 | −0.009 |
+| 60 days | 0.012 | −0.026 | 0.061 | −0.003 | 0.088 | −0.008 | 0.039 | 0.018 | 0.014 | 0.008 | 0.047 | 0.036 | −0.039 |
+
+Validation score inside training vs test score (v1.0, average over the 13 folds): 0.018 vs 0.014 (5 days), 0.021 vs 0.019 (20 days), 0.023 vs 0.020 (60 days). The two are close, so the model is not simply memorising its training data.
+
+- The skill did not come from the wrong stock list: 5 and 20 days are slightly stronger on the true index.
+- 60 days is weaker and less steady (four negative years).
+- 2024, the most recent test year, is negative at 20 and 60 days.
+- Diebold-Mariano tests on forecast error do not beat the Random Walk at any horizon (p 0.10–0.46): the skill is in the ranking, not in the size of the forecast.
+
+How these numbers compare with other tools and research: [`market-comparison.md`](market-comparison.md).
 
 **How to read the metrics**
 

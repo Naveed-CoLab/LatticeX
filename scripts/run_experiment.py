@@ -49,6 +49,11 @@ def load_prices(source: str, signal: str, n_stocks: int, benchmark: str = "SPY",
         return make_prices(n_stocks=n_stocks, signal=signal)
     raw = pd.read_parquet(path("clean") / "prices.parquet",
                           columns=["date", "ticker", "adj_close", "volume"])
+    keep = set(load_universe()["ticker"]) | {benchmark}     # price files of symbols no longer in the universe
+    dropped = raw["ticker"].nunique() - len(set(raw["ticker"]) & keep)
+    raw = raw[raw["ticker"].isin(keep)]                     # (old names, other companies' symbols) are ignored
+    if verbose and dropped:
+        print(f"Ignoring {dropped} price files that are not in config/universe.csv")
     return align_to_calendar(raw, benchmark, verbose=verbose)
 
 

@@ -45,6 +45,53 @@ CONCEPTS = {
 }
 FORMS = {"10-K", "10-Q", "10-K/A", "10-Q/A", "10-KT", "20-F", "40-F"}
 
+# Same business, earlier SEC registrant. After a re-incorporation or holding-company reorganisation the SEC
+# gives the company a NEW number (CIK), and the old filings stay under the old one. Without this, Exxon's
+# history would start in 2026 and Disney's in 2019. ticker -> earlier CIKs (company names are printed at
+# download time so each match can be checked).
+PREDECESSOR_CIKS = {
+    "XOM": [34088], "DIS": [1001039], "GOOGL": [1288776], "GOOG": [1288776], "CI": [701221], "MDT": [64670],
+    "BLK": [1364742], "XRX": [108772], "APA": [6769], "ETN": [31277], "AVGO": [1649338, 1441634],
+    "ICE": [1174746], "MRVL": [1058057], "NAVI": [1593538], "FTI": [1135152],
+}
+# A word the earlier registrant's SEC name must contain. A predecessor whose name does not match is skipped
+# (and reported), so a wrong number here can never mix another company's data in.
+PREDECESSOR_WORDS = {
+    34088: ("EXXON",), 1001039: ("DISNEY", "TWDC"), 1288776: ("GOOGLE",), 701221: ("CIGNA",),
+    64670: ("MEDTRONIC",), 1364742: ("BLACKROCK",), 108772: ("XEROX",), 6769: ("APACHE",), 31277: ("EATON",),
+    1649338: ("BROADCOM",), 1441634: ("AVAGO",), 1174746: ("INTERCONTINENTAL",),
+    1058057: ("MARVELL",), 1593538: ("NAVIENT",), 1135152: ("FMC TECHNOLOGIES",),
+}
+REUSED_GRACE_DAYS = 400
+# SEC matches known to be another company, which the date rule cannot see because the price file itself
+# continues under the reused symbol: CPWR = Compuware until Dec 2014, a penny stock's filings since 2011.
+SEC_WRONG_COMPANY = {"CPWR"}
+
+
+def predecessor_ok(cik: int, name: str) -> bool:
+    words = PREDECESSOR_WORDS.get(cik)
+    ok = words is None or any(w in str(name).upper().replace(" ", "") or w in str(name).upper() for w in words)
+    if not ok:
+        print(f"      ! CIK {cik} is '{name}', expected {'/'.join(words)} -> skipped (fix PREDECESSOR_CIKS)")
+    return ok
+
+
+def reused_sec_tickers(last_filed: pd.Series, last_price: pd.Series | None = None) -> list:
+    """Tickers whose SEC match is a DIFFERENT, later company: the registrant kept filing long after the stock's
+    prices ended (e.g. old member delisted in 2014, another company uses the symbol today). SEC's ticker list
+    only knows today's owner of a symbol, so these matches would attach the wrong company's numbers to the old
+    stock. last_filed / last_price: latest date per ticker. Tickers without prices are left alone (unused)."""
+    if last_price is None:
+        p = path("clean") / "prices.parquet"
+        if not p.exists():
+            return []
+        px = pd.read_parquet(p, columns=["ticker", "date"])
+        last_price = px.groupby("ticker")["date"].max()
+    lf = pd.to_datetime(last_filed, utc=True).dt.tz_localize(None)
+    lp = pd.to_datetime(last_price, utc=True).dt.tz_localize(None).reindex(lf.index)
+    late = lf > lp + pd.to_timedelta(REUSED_GRACE_DAYS, unit="D")
+    return sorted(set(late[late].index) | (SEC_WRONG_COMPANY & set(lf.index)))
+
 
 def _get(url: str) -> requests.Response:
     for attempt in range(6):
@@ -88,12 +135,12 @@ def extract(facts_json: dict, ticker: str) -> pd.DataFrame:
     return df
 
 
-def download(tickers: list) -> None:
+def download(tickers: list, force: bool = False) -> None:
     out = path("raw") / "edgar"
-    out.mkdir(exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
     nf_file = out / "_not_found.txt"
     not_found = set(nf_file.read_text().split()) if nf_file.exists() else set()
-    todo = [t for t in tickers if not (out / f"{t}.parquet").exists() and t not in not_found]
+    todo = [t for t in tickers if force or (not (out / f"{t}.parquet").exists() and t not in not_found)]
     print(f"{len(tickers)} stocks, {len(todo)} to download")
     if not todo:
         return
@@ -111,6 +158,15 @@ def download(tickers: list) -> None:
             continue
         r.raise_for_status()
         df = extract(r.json(), t)
+        for old in PREDECESSOR_CIKS.get(t, []):          # earlier registrant of the same business
+            time.sleep(0.12)
+            ro = _get(FACTS_URL.format(cik=old))
+            if ro.status_code == 200:
+                jo = ro.json()
+                if not predecessor_ok(old, jo.get("entityName", "?")):
+                    continue
+                print(f"      + earlier registrant CIK {old}: {jo.get('entityName', '?')}")
+                df = pd.concat([extract(jo, t), df], ignore_index=True)
         df.to_parquet(out / f"{t}.parquet", index=False)
         span = f"{df['end'].min():%Y} to {df['end'].max():%Y}" if len(df) else "empty"
         print(f"[{i}/{len(todo)}] {t} (CIK {cik}): {len(df):,} values, {span}")
@@ -126,6 +182,10 @@ def combine() -> pd.DataFrame:
     if not files:
         raise SystemExit("Nothing downloaded yet.")
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    bad = reused_sec_tickers(df.groupby("ticker")["filed"].max())
+    if bad:
+        print(f"Symbol now used by another company at the SEC ({len(bad)}), left out: {' '.join(bad)}")
+        df = df[~df["ticker"].isin(bad)]
     out = path("clean") / "fundamentals.parquet"
     df.to_parquet(out, index=False)
     print(f"Saved {len(df):,} values for {df['ticker'].nunique()} companies -> {out}")
@@ -144,7 +204,7 @@ if __name__ == "__main__":
             u = pd.read_csv(ROOT / "config" / "universe.csv")
             tickers = sorted(u.loc[u.get("type", "stock") == "stock", "ticker"].dropna().unique())
         try:
-            download(tickers)
+            download(tickers, force=bool(a.tickers))     # tickers named on the command line are re-downloaded
         except KeyboardInterrupt:
             print("\nStopped; finished companies are saved. Run again to continue.")
     combine()

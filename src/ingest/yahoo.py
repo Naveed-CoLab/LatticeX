@@ -25,10 +25,9 @@ import pandas as pd
 from src.config import ROOT, path
 
 START = "2000-01-01"
-# Symbols Yahoo now uses for a different company than the S&P 500 member of the same ticker, where the
-# date check below can't tell (the new company's history also covers the old membership years).
-KNOWN_RECYCLED = {"TT"}          # TT in the index 2002-08 = Trane (American Standard); Yahoo TT = Ingersoll-Rand
+KNOWN_RECYCLED = set()       # hand-flagged symbols (none now: build_universe drops bad spells itself)
 GRACE_DAYS = 400   # real recycled cases start years later; SPGI (S&P Global) starts 1 year after our data -> kept
+MIN_ROWS = 20                    # fewer rows = a stub Yahoo leaves behind for a delisted symbol, not a history
 
 
 def _yahoo_symbol(t: str) -> str:
@@ -108,6 +107,10 @@ def download(tickers: list) -> None:
             failed.append(t)
             print(f"[{i}/{len(todo)}] {t}: Yahoo history doesn't overlap Tiingo's range -> skipped")
             continue
+        if len(df) < MIN_ROWS:
+            failed.append(t)
+            print(f"[{i}/{len(todo)}] {t}: only {len(df)} rows on Yahoo (delisted, history removed) -> skipped")
+            continue
         df["date"] = df["date"].dt.strftime("%Y-%m-%dT00:00:00.000Z")   # same as Tiingo raw files
         df.to_parquet(out_dir / f"{t}.parquet", index=False)
         print(f"[{i}/{len(todo)}] {t}: {len(df)} rows, {df['date'].min()[:10]} to {df['date'].max()[:10]}")
@@ -117,11 +120,16 @@ def download(tickers: list) -> None:
 
 
 def recycled(first_date, spells: pd.DataFrame) -> bool:
-    """True if a Yahoo history starts well after the stock joined the index: then Yahoo's symbol most likely
-    belongs to a newer company (e.g. 'S' = Sprint in the index, SentinelOne on Yahoo)."""
-    starts = pd.to_datetime(spells["start"]).dropna()
-    joined = max(starts.min(), pd.Timestamp(START)) if len(starts) else pd.Timestamp(START)
-    return pd.Timestamp(first_date) > pd.Timestamp(joined) + pd.to_timedelta(GRACE_DAYS, unit="D")
+    """True if Yahoo's history can't belong to any of the stock's membership spells: it starts well after
+    the stock joined the index in every spell (e.g. 'S' = Sprint in the index until 2013, SentinelOne on
+    Yahoo from 2021). A spell that is still open (current member) always counts as valid: today's symbol
+    is today's member."""
+    first = pd.Timestamp(first_date)
+    for a, b in zip(pd.to_datetime(spells["start"]), pd.to_datetime(spells["end"])):
+        joined = max(a, pd.Timestamp(START)) if pd.notna(a) else pd.Timestamp(START)
+        if pd.isna(b) or first <= joined + pd.to_timedelta(GRACE_DAYS, unit="D"):
+            return False
+    return True
 
 
 def prune(prices_dir=None, universe: pd.DataFrame | None = None) -> list:
@@ -141,11 +149,15 @@ def prune(prices_dir=None, universe: pd.DataFrame | None = None) -> list:
         first = pd.to_datetime(df["date"]).min()
         first = first.tz_localize(None) if first.tzinfo is not None else first
         spells = u[u["ticker"] == t]
+        if len(df) < MIN_ROWS:
+            f.replace(rej / f.name)
+            moved.append(f"{t} (only {len(df)} rows: delisted, Yahoo removed its history)")
+            continue
         if t in KNOWN_RECYCLED or spells.empty or recycled(first, spells):
             f.replace(rej / f.name)
             since = f", index from {pd.Timestamp(spells['start'].min()):%Y-%m-%d}" if spells["start"].notna().any() else ""
             moved.append(f"{t} (Yahoo history from {first:%Y-%m-%d}{since})")
-    print(f"Recycled-symbol check: {len(moved)} Yahoo files set aside" + (":\n  " + "\n  ".join(moved) if moved else ""))
+    print(f"Recycled-symbol / stub check: {len(moved)} Yahoo files set aside" + (":\n  " + "\n  ".join(moved) if moved else ""))
     return moved
 
 

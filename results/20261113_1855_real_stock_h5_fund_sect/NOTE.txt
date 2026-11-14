@@ -1,0 +1,2 @@
+metrics.csv and rank_ic_by_year.csv were copied from the Kaggle run log (by-year values rounded to 3 decimals).
+Universe: corrected S&P 500 membership list, 727 stocks, BEFORE the six wrong-company histories were dropped (see docs/decisions.md, 13 Nov 2026).
