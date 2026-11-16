@@ -34,10 +34,14 @@ Crash risk (GPU): probability of a >10% drop within 20 days, vs a volatility-onl
 Recovery after a crash (GPU): history table + P(back at the pre-drop price within 60 / 20 days)
   python -m scripts.kaggle_cloud recovery "--data real --fundamentals --sectors" "--data real --fundamentals --sectors --within 20"
 
+The model for daily use (GPU, about 15 minutes): train v1.0 on all data and save it; the dashboard then ranks
+every stock with it after each close. Repeat every month or quarter.
+  python -m scripts.kaggle_cloud final-model
+
 Every command waits for Kaggle to finish, then copies the outputs to your PC:
-  data files -> data\\clean\\        results -> results\\        logs -> results\\kaggle_<job>.log
+  data files -> data\\clean\\        results -> results\\        model -> models\\        logs -> results\\kaggle_<job>.log
 Add --no-wait to start a job and return immediately; collect later with:
-  python -m scripts.kaggle_cloud download <job>      jobs: news-probe, news-download, news-score, experiments
+  python -m scripts.kaggle_cloud download <job>      jobs: news-probe, news-download, news-score, experiments, final-model
   (news chunks run as separate jobs named by start year and can run at the same time;
    collect one with: download news-download --start 2015-01)
   python -m scripts.kaggle_cloud status <job>
@@ -74,6 +78,7 @@ JOBS = {
     "brackets":      {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
     "crash":         {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
     "recovery":      {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
+    "final-model":   {"gpu": True, "secrets": False, "sources": [], "keep": ["models"]},
     "kronos":        {"gpu": True, "secrets": False, "sources": [],
                       "keep": ["data/clean/kronos_forecasts.parquet", "data/clean/kronos_timing.parquet"]},
     "timesfm":       {"gpu": True, "secrets": False, "sources": [],
@@ -296,6 +301,11 @@ def download(name: str, wait: bool = True, poll_minutes: int = 2, variant: str =
                     m = item / mname
                     if m.exists():
                         print(f"\n{item.name}\n{pd.read_csv(m).round(4).to_string(index=False)}")
+    for f in sorted((base / "models").glob("*.npz")) if (base / "models").exists() else []:
+        (ROOT / "models").mkdir(exist_ok=True)
+        shutil.copy2(f, ROOT / "models" / f.name)
+        print(f"  -> models\\{f.name} ({f.stat().st_size / 1e3:.0f} KB). The dashboard uses it from its next start: "
+              f"python -m scripts.run_dashboard")
     for log in sorted((base / "logs").glob("*.log")) if (base / "logs").exists() else []:
         dest = path("results") / f"kaggle_{slug(name, variant)}_{log.name}"
         shutil.copy2(log, dest)
@@ -348,6 +358,8 @@ def main(argv: list) -> None:
     elif cmd == "recovery":
         jobs = rest or ["--data real --fundamentals --sectors"]
         steps = ["scripts.run_recovery " + j for j in jobs]
+    elif cmd == "final-model":
+        steps = ["scripts.train_final " + " ".join(rest)]
     elif cmd == "crash":
         jobs = rest or ["--data real --fundamentals --sectors"]
         steps = ["scripts.run_crash_risk " + j for j in jobs]

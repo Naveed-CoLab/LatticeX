@@ -60,7 +60,10 @@ def load_prices(source: str, signal: str, n_stocks: int, benchmark: str = "SPY",
 def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
                 use_news: bool = False, use_fund: bool = False, use_sectors: bool = False,
                 use_kronos: bool = False, kronos_model: bool = False,
-                use_timesfm: bool = False, timesfm_model: bool = False) -> tuple[pd.DataFrame, list]:
+                use_timesfm: bool = False, timesfm_model: bool = False,
+                raw_prices: pd.DataFrame | None = None, fundamentals: pd.DataFrame | None = None) -> tuple[pd.DataFrame, list]:
+    """raw_prices / fundamentals: tables to use instead of the files in data/clean. Daily scoring passes the
+    recent, extended tables here so that research and daily use build features with exactly the same code."""
     universe = load_universe() if source == "real" else None
     groups = asset_types(universe) if universe is not None else None
     feats = price_features(prices, s["benchmark"], s["features"]["cross_sectional_rank"], groups)
@@ -81,13 +84,14 @@ def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
         feature_cols += MACRO_FEATURES
     if use_fund and source == "real":
         ff = path("clean") / "fundamentals.parquet"
-        if not ff.exists():
+        if fundamentals is None and not ff.exists():
             raise SystemExit("--fundamentals needs data/clean/fundamentals.parquet. Run: python -m scripts.kaggle_cloud "
                              "fundamentals-download  (or locally: python -m src.ingest.edgar)")
-        raw = pd.read_parquet(path("clean") / "prices.parquet", columns=["date", "ticker", "close", "split_factor"])
+        raw = raw_prices if raw_prices is not None else pd.read_parquet(
+            path("clean") / "prices.parquet", columns=["date", "ticker", "close", "split_factor"])
         stocks = panel.loc[panel["asset"] == "stock", ["date", "ticker"]]
-        fund = fundamental_features(pd.read_parquet(ff), raw, stocks, s["features"]["cross_sectional_rank"],
-                                    prices_adj=prices)
+        fund = fundamental_features(fundamentals if fundamentals is not None else pd.read_parquet(ff), raw, stocks,
+                                    s["features"]["cross_sectional_rank"], prices_adj=prices)
         panel = panel.merge(fund, on=["date", "ticker"], how="left")
         feature_cols += FUND_FEATURES
     for name, as_feat, as_model in (("kronos", use_kronos, kronos_model), ("timesfm", use_timesfm, timesfm_model)):
@@ -115,7 +119,7 @@ def build_panel(prices: pd.DataFrame, s: dict, source: str, use_macro: bool,
         arts_f, scored_f = path("clean") / "news_articles.parquet", path("clean") / "news_scored.parquet"
         if not (arts_f.exists() and scored_f.exists()):
             raise SystemExit("--news needs data/clean/news_articles.parquet and news_scored.parquet. "
-                             "See README: Benzinga download + Kaggle FinBERT.")
+                             "Download: python -m src.ingest.alpaca_news --start 2015-01, then --combine; score: python -m scripts.kaggle_cloud news-score")
         stocks = panel.loc[panel["asset"] == "stock", "ticker"].unique()
         nf = news_features(pd.read_parquet(arts_f), pd.read_parquet(scored_f), panel["date"], stocks,
                            s["features"]["cross_sectional_rank"])

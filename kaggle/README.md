@@ -4,4 +4,4 @@ Code that runs **inside** Kaggle notebooks. Most jobs don't need anything here: 
 
 | Path | Purpose |
 |---|---|
-| `finbert/finbert_score.py` | Scores news headlines with FinBERT on the Kaggle GPU (used by `scripts/kaggle_news.py`) |
+| `finbert/finbert_score.py` | Scores news headlines with FinBERT on the Kaggle GPU (used by `scripts/kaggle_news.py`; the `news-score` job runs `src/news/sentiment.py`) |

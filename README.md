@@ -10,7 +10,7 @@
   <a href="https://github.com/Naveed-CoLab/LatticeX/actions/workflows/tests.yml"><img src="https://github.com/Naveed-CoLab/LatticeX/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white" alt="python">
   <img src="https://img.shields.io/badge/PyTorch-neural%20net-EE4C2C?logo=pytorch&logoColor=white" alt="pytorch">
-  <img src="https://img.shields.io/badge/XGBoost-price%20ranges-189FDD" alt="xgboost">
+  <img src="https://img.shields.io/badge/NumPy-daily%20scoring-013243?logo=numpy&logoColor=white" alt="numpy">
   <img src="https://img.shields.io/badge/Kaggle-T4%20x2-20BEFF?logo=kaggle&logoColor=white" alt="kaggle">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
   <img src="https://img.shields.io/badge/status-research%20preview-orange" alt="status">
@@ -19,68 +19,372 @@
 <p align="center">
   <a href="#what-it-does">What it does</a> ·
   <a href="#results-at-a-glance">Results</a> ·
-  <a href="#how-it-compares-with-the-market">Market comparison</a> ·
-  <a href="#app-structure">App structure</a> ·
+  <a href="#models-what-we-picked-and-what-we-dropped">Models</a> ·
+  <a href="#system-architecture">Architecture</a> ·
+  <a href="#requirements">Requirements</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/PROGRESS.md">Progress</a>
 </p>
 
-A university final-year project (2026), built to become a product. Architecture and methods: [`docs/architecture.md`](docs/architecture.md).
+A university final-year project (2026), built to become a product. **New here? Start with [`docs/project-flow.md`](docs/project-flow.md)**: the whole project as one step-by-step story, with the status of each step.
 
 > **Not investment advice.** This is a research project. All results are historical backtests, and no return or profit claim is made.
 
+**Writing a requirements (SRS) or design (SDS) document from this repo?** Use [Requirements](#requirements) for the SRS and [System architecture](#system-architecture) plus [`docs/architecture.md`](docs/architecture.md) for the SDS. Every model choice with its numbers is in [Models](#models-what-we-picked-and-what-we-dropped) and [`docs/decisions.md`](docs/decisions.md). Terms are explained in the [Glossary](#glossary).
+
 ---
+
+## Status (16 Nov 2026)
+
+| Part | State |
+|---|---|
+| Data: prices, fundamentals, SEC filings, audited S&P 500 membership | Built. Research data frozen as "universe v2" (722 stocks, 2000–2026) |
+| Ranking model v1.0 | Chosen, measured on 13 test years, trained once on all data, saved, used every day |
+| Price ranges | Built and measured; shown in the dashboard and updated with the price during the day |
+| Dashboard | Built: three pages, daily and intraday updates, model rank, analyst views. Runs on one PC |
+| News sentiment | In testing: download built (Alpaca), not yet measured, not in the model |
+| Crash risk, recovery odds, sector-neutral target | Code written, not yet measured on real data |
+| SEC 8-K event features | Filings downloaded and shown in the dashboard; features not written yet |
+| Live track record, chat assistant, hosted service with accounts | Not built |
+| 2025–26 holdout test | Locked; run once when the model is final |
 
 ## What it does
 
-For every S&P 500 stock on a given day, LatticeIQ produces:
+For every S&P 500 stock, after each market close:
 
-| Output | Meaning |
-|---|---|
-| **Excess-return forecast and rank** | Expected return vs SPY over 5 / 20 / 60 trading days, and where the stock ranks against the others |
-| **Price ranges** | 50% / 80% / 90% likely price ranges, calibrated so the 80% range really contains the price about 80% of the time |
-| **Track record for that rank** | How stocks ranked like this one actually did against SPY in testing |
-| **Crash risk · recovery odds** *(in testing)* | Chance of a 10%+ drop in 20 days; after a crash, chance of getting back to the old price |
-| **Official company news** *(in testing)* | SEC 8-K events (earnings, restatements, executive changes…) as a live feed |
-| **Drivers** | Which features pushed the forecast |
+| Output | Meaning | Where it comes from |
+|---|---|---|
+| **Rank against the market** | Where the stock stands among about 500 for the next 5 / 20 / 60 trading days, with the expected return above or below SPY | Neural net v1.0 |
+| **Track record for that rank** | How stocks ranked like this one did against SPY in 13 test years | Walk-forward test |
+| **Price ranges** | Ranges that should hold the price 1 time in 2, 4 times in 5 and 9 times in 10; wider when an earnings report falls inside the window | Volatility range model |
+| **Today's price and live ranges** | Delayed prices while the US market is open; the ranges follow the price | Yahoo Finance |
+| **Company events** | SEC 8-K filings by type (earnings, restatement, executive change…) and the next expected earnings date | SEC EDGAR |
+| **What analysts expect** | 12-month price targets and buy / hold / sell counts, shown as opinions and not tested | Yahoo Finance |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/forecast_card_dark.png">
   <img alt="Example forecast: a candlestick chart with volume, a shaded 50/80/90% price cone for the next 20 trading days, and a panel with rank, expected return vs the market, price ranges and main drivers" src="docs/assets/forecast_card_light.png" width="100%">
 </picture>
 
+It does **not** give buy or sell calls, a probability that a stock goes up, an accuracy percentage or any profit figure. Each of those was either tested and failed or cannot be proven (see [what we claim](#what-we-claim-and-what-we-dont)).
+
 ## Results at a glance
 
-Walk-forward backtest on the corrected S&P 500 membership list: **727 stocks, test years 2012–2024, about 298,000 weekly forecasts**. For each test year the model is retrained only on earlier data, with a 60-day gap. The 2025–26 holdout is still locked.
+Walk-forward backtest on the audited S&P 500 membership list: **722 stocks, test years 2012–2024, about 298,000 weekly forecasts**. For each test year the model is retrained only on earlier data, with a 60-day gap. The 2025–26 holdout is still locked.
 
 | v1.0 neural net | 5 days | 20 days | 60 days |
 |---|---|---|---|
-| Direction vs the market right (coin flip = 50%) | 50.4% | **50.6%** | 51.0% |
-| Rank IC (0 = no skill) | 0.0141 | **0.0192** | 0.0202 |
-| t-statistic (above 2 = significant) | 2.84 | **2.95** | 2.23 |
-| Years with positive rank IC | 11 of 13 | **12 of 13** | 9 of 13 |
+| Direction vs the market right (coin flip = 50%) | 50.5% | **50.7%** | 51.0% |
+| Rank IC (0 = no skill) | 0.0149 | **0.0197** | 0.0199 |
+| t-statistic (above 2 = significant) | 3.07 | **3.18** | 2.23 |
+| Years with positive rank IC | 12 of 13 | **10 of 13** | 10 of 13 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/rank_ic_by_year_dark.png">
-  <img alt="Rank IC by test year for the v1.0 neural net at 20 days: positive in 12 of 13 years, negative in 2024" src="docs/assets/rank_ic_by_year_light.png" width="100%">
+  <img alt="Rank IC by test year for the v1.0 neural net at 20 days: positive in 10 of 13 years, close to zero in 2019 and 2021, negative in 2024" src="docs/assets/rank_ic_by_year_light.png" width="100%">
 </picture>
 
-**Reading these numbers.** The edge is small and statistically significant. It did not come from a data error: on the earlier, wrong stock list (see below) the scores were 0.0136 / 0.0180 / 0.0229, so the 5- and 20-day results got slightly stronger on the true index and the 60-day result slightly weaker. The most recent test year, 2024, is negative at 20 and 60 days.
+**Reading these numbers.** The edge is small and statistically significant, and it survived a large data correction: on the earlier, wrong stock list the scores were 0.0136 / 0.0180 / 0.0229, so the 5- and 20-day results got slightly stronger on the true index and the 60-day result slightly weaker. At 20 days the forecasts also beat a "no change" forecast on error size (Diebold-Mariano p = 0.02). Weak points: 2019 and 2021 are about zero at 20 days, and **2024, the most recent test year, is negative at 20 and 60 days**. A check made while training the daily model points the same way: the edge has been thin since 2021 and clearly positive only at 5 days ([`docs/results.md`](docs/results.md), section 0c).
 
 ### What we claim, and what we don't
 
 | Claim | Status | Evidence |
 |---|---|---|
 | The ranking has a small, significant edge that held in most of 13 test years | **Yes** | Table above |
-| The 90% price range contains the real price about 90% of the time | **Yes** | 90.0% / 90.4% / 90.8% at 5 / 20 / 60 days¹ |
-| Low-ranked stocks tend to lag the market | **Yes** | Bottom 20% beat SPY only 48.0% of the time (20 days)¹ |
-| Top-ranked stocks beat the market | **No, not yet** | Top 20% beat SPY 49.9% of the time¹: they match it |
+| Low-ranked stocks tend to lag the market | **Yes** | Bottom 20% beat SPY only 47.7% of the time and trailed the top 20% by 0.46% per 20 days, in 11 of 13 years |
+| The "4 times in 5" price range holds the price about 4 times in 5 | **Yes** | 79.5% / 79.0% / 79.1% at 5 / 20 / 60 days, about 306,000 forecasts per horizon |
+| Top-ranked stocks beat the market | **No, not yet** | Top 20% beat SPY 49.9% of the time: they match it |
 | We predict whether a stock will go up | **No** | Tested; lost to the plain historical rate, dropped |
 | "X% accurate", or any return or profit figure | **No** | Not a provable claim; no trading strategy tested after costs |
 
-<sub>¹ Measured on the earlier 634-stock list; the re-run on the corrected list is in progress.</sub>
+Runs `20261114_0752/0809/0827` in [`results/`](results/). All tables: [`docs/results.md`](docs/results.md).
 
-Numbers shown here are from runs `20261113_1855/1914/1932` (in [`results/`](results/)), made before six wrong-company price histories were removed in the data audit of 13 Nov 2026. The final "universe v2" run replaces them; full history in [`docs/decisions.md`](docs/decisions.md).
+## Models: what we picked and what we dropped
+
+One rule decided everything: a model or feature group stays only if it improves the rank IC on the walk-forward test years 2012–2024 in most years, not only on average. The 2025–26 holdout is never used to choose.
+
+### In the product
+
+| Job | Choice | Details | Measured |
+|---|---|---|---|
+| Rank stocks against the market | **Neural net, average of 3 seeds ("v1.0")** | Input 44 features → 64 → 32 → 1, ReLU, dropout 0.1, Adam, up to 8 passes with early stopping. One model per horizon. Features are ranked across stocks on each day. Target: return minus SPY's, extreme 1% clipped per day. Each forecast is multiplied by a trust factor *k* between 0 and 1, learned from the latest training years | Rank IC 0.0149 / 0.0197 / 0.0199, t 3.07 / 3.18 / 2.23 |
+| Features | **Price and volume (17) + fundamentals (15) + sector (12)** | Momentum, reversal, volatility, beta; value, profitability, growth, earnings surprise from SEC filings; sector momentum and each stock's position inside its sector | Sectors gave the biggest single gain (0.0115 → 0.0140 on the early list) |
+| Price ranges | **Volatility range model** | Range centred on the price; width = blend of four volatility measures × a multiplier fitted on past windows, with a separate multiplier when an earnings report is expected | 80% range held 79.5% / 79.0% / 79.1%; in earnings windows 77–79% (a one-size range: 57%) |
+| Baseline | **Random Walk** (forecast = no excess return) | Every model must beat it | Rank IC 0 by construction |
+| Second model for the holdout test | Ensemble of XGBoost + neural net, weighted by recent ranking skill | Declared before v1.0 was chosen, so both are scored once on the holdout | 0.0141 / 0.0173 / 0.0123 |
+
+### Tested and dropped
+
+| Tried | Result (20 days unless stated) | Why it is out |
+|---|---|---|
+| XGBoost as the main model | Rank IC 0.0067, t 0.86 on the audited list | Became unstable when the stock list grew; the neural net improved |
+| LightGBM | 0.0080, t 1.00 | Ranks stocks 86% the same as XGBoost: a second vote for trees, no new information |
+| Ridge (linear) | 0.0042, t 0.41 | Too simple; lowers any ensemble it joins |
+| XGBoost ranking objective | 0.0080 vs 0.0140 for regression | Worse on the same features |
+| Ensembles with three or four models | 0.0143, 0.0130 vs 0.0168 for two | Similar models outvote the different one |
+| Macro features (VIX, yields, credit spread, CPI…) | 0.0118 vs 0.0128 price-only | Same value for every stock on a day, so it cannot help order them |
+| Kronos-small, pretrained, alone | 0.0087, t 0.81, positive in 7 of 13 years | Weak and inconsistent; forecasts far too large |
+| Kronos forecasts as extra features | 0.0147 vs 0.0140 | +0.0007 is noise (better in 6 years, worse in 5) and needs a daily GPU run |
+| TimesFM 2.5, pretrained, alone | −0.0017, t −0.27 | No skill: its forecasts barely differ between stocks |
+| TimesFM forecasts as extra features | 0.0128 vs 0.0140 | Makes the model worse |
+| Probability that a stock goes up | Brier 0.2513 vs 0.2446 for the plain historical rate | Loses to "stocks rose 57% of the time"; removed from the product |
+| Fine-tuning Kronos on US stocks | Not run | Published evidence shows little gain; finance-pretrained weights are tested instead |
+| TabPFN-2.5, Moirai 2.0, TiRex | Not run | Licences do not allow commercial use, or are unclear |
+| News from the direct Benzinga plan | About 2 articles a day market-wide | Too thin to compare stocks; replaced by Alpaca (in testing) |
+
+The comparisons from LightGBM down to TimesFM were run on the earlier 466- and 634-stock lists; the choice of the neural net was then re-measured on the audited list and held at all three horizons. Full record, including the data error found on 12 Nov 2026: [`docs/decisions.md`](docs/decisions.md).
+
+**Why pretrained models lost.** Kronos and TimesFM see one stock's price history at a time. Our model compares all stocks on the same day and adds fundamentals and sector context, which is what "which stock beats the market" needs.
+
+### Written, not yet measured on real data
+
+| Item | What it is | Kept only if |
+|---|---|---|
+| News sentiment | Alpaca news (Benzinga articles, 2015 on) scored for tone, 8 features per stock per day | It beats v1.0 on test years 2018–2024 |
+| Sector-neutral target | Learn "beat your own sector fund" instead of "beat SPY" | It beats v1.0 |
+| Crash-risk model | Chance of a fall of more than 10% within 20 days | It beats a volatility-only model and is calibrated |
+| Recovery model | After a crash, how often and how fast stocks got back to the old price | It beats the plain historical rate |
+| Quantile XGBoost price ranges | The first range model; 79.8% / 80.3% / 80.2% on the earlier list | It beats the volatility range model on the audited list |
+| ARIMA per stock | Classical baseline for the report | — |
+
+Next candidates, not started: SEC 8-K events as inputs (the filings are already downloaded), a finance-pretrained forecaster (FinText Chronos), insider trading (SEC Form 4), short interest, option-implied volatility.
+
+## System architecture
+
+Three places run code: the PC (downloads, daily ranking, the local web server), Kaggle (training and experiments on a free GPU) and the browser (the dashboard). There is no hosted server and no database: data is kept in files.
+
+```mermaid
+flowchart LR
+    subgraph EXT["Outside sources"]
+        TG["Tiingo + Yahoo<br/>research price history"]
+        MEM["S&P 500<br/>membership history"]
+        SEC["SEC EDGAR<br/>fundamentals, 8-K filings"]
+        YH["Yahoo Finance<br/>daily prices, analyst views"]
+        ALP["Alpaca news<br/>in testing"]
+    end
+    subgraph PC["The PC, Python 3.11+"]
+        ING["Downloaders<br/>src/ingest"]
+        RES[("Research data, frozen<br/>data/clean")]
+        LIVE[("Daily prices and filings<br/>data/live")]
+        MODEL[("Saved model<br/>models/latticeiq_v1.npz")]
+        SCORE["Daily ranking<br/>src/models/production.py<br/>uses src/features"]
+        RANGE["Range model<br/>src/models/vol_ranges.py"]
+        RANK[("Ranks and forecast log<br/>data/live")]
+        EXP["Page data builder<br/>scripts/export_dashboard.py"]
+        PAGE[("Page data<br/>app/data")]
+        SRV["Local web server<br/>scripts/run_dashboard.py"]
+    end
+    subgraph KG["Kaggle GPU"]
+        WF["Walk-forward experiments<br/>scripts/run_experiment.py"]
+        TR["Train v1.0 once<br/>scripts/train_final.py"]
+        OUT[("Test results<br/>results/")]
+    end
+    subgraph BR["Browser"]
+        UI["Dashboard<br/>Overview, Stocks, Track record"]
+    end
+    TG --> ING
+    MEM --> ING
+    SEC --> ING
+    YH --> ING
+    ALP -.-> ING
+    ING --> RES
+    ING --> LIVE
+    RES --> WF
+    RES --> TR
+    WF --> OUT
+    TR --> MODEL
+    MODEL --> SCORE
+    RES --> SCORE
+    LIVE --> SCORE
+    SCORE --> RANK
+    LIVE --> RANGE
+    RANGE --> EXP
+    RANK --> EXP
+    OUT --> EXP
+    EXP --> PAGE
+    PAGE --> SRV
+    YH -->|delayed prices during the day| SRV
+    SRV <-->|pages and JSON| UI
+```
+
+### Components
+
+| # | Component | Code | Responsibility | Reads | Writes |
+|---|---|---|---|---|---|
+| 1 | Research downloaders | `src/ingest/tiingo.py`, `yahoo.py`, `edgar.py`, `sec_events.py`, `fred.py`, `alpaca_news.py` | Build the frozen research data once | Outside sources, `.env` keys | `data/raw/`, `data/clean/*.parquet` |
+| 2 | Universe builder and audit | `scripts/build_universe.py`, `scripts/audit_universe.py`, `src/universe.py` | Who was in the S&P 500 on each day; reject price histories that belong to another company | Membership file, prices | `config/universe.csv` |
+| 3 | Feature code | `src/features/`, `src/targets.py`, `src/data/clean.py` | Point-in-time features and targets on the trading calendar | Prices, fundamentals | In-memory panel (one row per stock per day) |
+| 4 | Experiment runner | `scripts/run_experiment.py`, `src/folds.py`, `src/eval/metrics.py` | Walk-forward training and scoring of any model and feature set | Panel | `results/<run>/` |
+| 5 | Kaggle job runner | `scripts/kaggle_cloud.py`, `kaggle/` | Upload data, start a GPU job, fetch its output | `data/clean/`, repo code | `results/`, `models/` |
+| 6 | Daily model | `src/models/production.py`, `scripts/train_final.py`, `scripts/score_today.py` | Train v1.0 once and save it; rank every stock after each close with numpy only | `models/latticeiq_v1.npz`, research + daily prices, fundamentals | `data/live/rank.json`, `data/live/forecasts/<day>.csv` |
+| 7 | Daily price update | `src/ingest/live.py` | Latest closing prices (3 years) and delayed prices during the day | Yahoo | `data/live/prices.parquet` |
+| 8 | Range model | `src/models/vol_ranges.py` | 50 / 80 / 90% price ranges for 5 / 20 / 60 days, earnings-aware | Prices, filing dates | `data/live/range_fit.json` |
+| 9 | Analyst views | `src/ingest/analysts.py` | Price targets and ratings for one stock, kept for a day, with a daily history | Yahoo | `data/live/analysts/<T>.json` |
+| 10 | Page data builder | `scripts/export_dashboard.py` | Turn prices, ranges, ranks, filings and test results into the files the page reads | 6, 7, 8, filings, `results/` | `app/data/index.json`, `stocks/<T>.json`, `track.json` |
+| 11 | Local web server | `scripts/run_dashboard.py` | Run updates on start and in the background; serve the page and three JSON endpoints | 6–10 | — |
+| 12 | Dashboard | `app/index.html`, `app.js`, `styles.css` | Everything the user sees | Server, logo service | Browser storage (theme, starred stocks, chart choices) |
+
+### The daily cycle
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as Local server
+    participant Y as Yahoo
+    participant E as SEC
+    participant M as Saved model
+    participant B as Dashboard page
+    U->>S: start (once a day, or left running)
+    S->>Y: closing prices, if a newer trading day exists
+    S->>E: filings since the last check (once a day)
+    S->>M: rank every stock for 5, 20, 60 days
+    S->>S: build page data
+    B->>S: load page and data
+    loop while the US market is open
+        B->>S: price of the stock on screen (every 20 s)
+        B->>S: all prices so far today (every 30 s)
+        S->>Y: delayed quotes (all stocks every 10 min)
+        B->>B: move the ranges to the price now
+    end
+    Note over S,B: About 20 minutes after the close the server downloads the finished day, ranks again, rebuilds the page data, and the page reloads itself
+```
+
+Two rules shape this design:
+
+- **Train once, score daily.** One more day of data does not change what 25 years taught the model, so training runs monthly or quarterly on Kaggle and the PC only scores. The saved file holds plain arrays; the forward pass is a few lines of numpy, checked against PyTorch in a test.
+- **One feature code path.** Daily scoring calls the same feature functions as the research code, on the research price history continued with the daily closing prices. On the test data this reproduces the research features exactly.
+
+### Server interface
+
+The server listens on `127.0.0.1:8600` only (this computer). All responses are JSON except the page files.
+
+| Request | Returns |
+|---|---|
+| `GET /` and files under `app/` | The dashboard page, scripts and `app/data/*.json` |
+| `GET /api/today` | `state` (market open or not, next open, New York time), `quotes` for all stocks so far today, `fetched` time, `built` (changes when the page data is rebuilt, which tells the page to reload) |
+| `GET /api/quote?t=NVDA` | Latest delayed price for one stock: date, open, high, low, last, volume, previous close. Empty before the market opens. 404 for an unknown ticker |
+| `GET /api/analysts?t=NVDA` | Price targets (low, mean, median, high), rating counts, last four earnings versus estimates |
+
+### Data files
+
+Nothing here is committed to the repo: price and news data are licensed, and the files are rebuilt by the scripts.
+
+| File | One row is | Main columns | Updated |
+|---|---|---|---|
+| `config/universe.csv` | A ticker's time in the index | ticker, type (stock / etf), start, end, source_ticker | On a rebuild (committed) |
+| `data/clean/prices.parquet` | A stock on a trading day (4.2 million rows) | date, ticker, open, high, low, close, volume, adj_close, split_factor | Frozen ("universe v2") |
+| `data/clean/fundamentals.parquet` | A reported value in an SEC filing (1.2 million) | ticker, item, start, end, val, filed, form | By `python -m src.ingest.edgar` |
+| `data/clean/sec_events.parquet` | An 8-K filing (170,000) | ticker, filed, accepted (time), items, severity, one flag per event type | Frozen; newer filings in `sec_events_latest.parquet`, daily |
+| `data/clean/news_articles.parquet`, `news_scored.parquet` | A news article; its sentiment score | id, created_utc, title, teaser, tickers, source; id, score | In testing |
+| `data/live/prices.parquet` | A stock on a trading day, last 3 years | ticker, date, open, high, low, close, volume, adj_close | After every close, replaced in full |
+| `models/latticeiq_v1.npz` | The saved model | Weights of 3 nets × 3 horizons, feature list, *k* per horizon, last training date | On retraining |
+| `data/live/rank.json` | Today's ranking | asof, model, per stock and horizon: position, percentile, expected excess return | After every close |
+| `data/live/forecasts/<day>.csv` | A stock's forecast made that day | asof, ticker, horizon, score, pct, pos, n, expected_excess, close | Appended daily, never changed |
+| `data/live/range_fit.json` | Fitted range multipliers | Per horizon, level, earnings or not | When the range model changes |
+| `app/data/index.json`, `stocks/<T>.json`, `track.json` | What the page shows | Per stock: price, ranges, rank, candles, earnings, filings; test results by year | After every close |
+| `results/<run>/` | One experiment | Settings, metrics by year, rank groups (predictions not committed) | Per experiment |
+
+### Technology
+
+| Layer | Used | Why |
+|---|---|---|
+| Language | Python 3.11+ (tests run on 3.12 in CI) | — |
+| Data | pandas, NumPy, Parquet (pyarrow) | Files are enough at this size; no database to run |
+| Models | PyTorch (neural net, training only), XGBoost and LightGBM (comparisons), NumPy (daily scoring) | Scoring on the PC needs no PyTorch |
+| Training compute | Kaggle notebooks, T4 GPUs, driven from the PC | Free; the full training took 6 minutes on 16 Nov 2026 |
+| Server | Python standard library `http.server`, one background thread | No framework needed for one local user |
+| Dashboard | Plain HTML, CSS and JavaScript; TradingView Lightweight Charts 5.3 (bundled in `app/vendor`) | No build step |
+| Tests | pytest, 43 tests, GitHub Actions on every push | Synthetic data, no keys needed |
+| Settings and secrets | `config/settings.yaml`; API keys in `.env`, never committed | — |
+
+More detail, including the evaluation rules and how each feature avoids look-ahead: [`docs/architecture.md`](docs/architecture.md).
+
+## Requirements
+
+Written from what the system does today, so they can be copied into an SRS. "Built" means working and tested; "Planned" means not started or not yet measured.
+
+### Users
+
+| User | Wants |
+|---|---|
+| Investor or student (viewer) | For a stock or the whole market: how it ranks, how far the price could move, what is scheduled, and how reliable those statements were in the past |
+| Operator (maintainer) | To keep data current, retrain the model, run experiments and add data sources without breaking the tested results |
+
+Outside systems: Yahoo Finance, SEC EDGAR, Tiingo, Alpaca, Kaggle, a logo service.
+
+### Functional requirements
+
+| ID | The system shall… | State |
+|---|---|---|
+| FR-1 | download the latest closing prices for every current S&P 500 member, 15 market and sector funds and former members that still trade, whenever a newer trading day exists | Built |
+| FR-2 | show delayed prices while the US market is open: the stock on screen every 20 seconds, all stocks every 10 minutes | Built |
+| FR-3 | give, for each stock and for 5, 20 and 60 trading days, three price ranges (1 in 2, 4 in 5, 9 in 10), widened when an earnings report is expected inside the window | Built |
+| FR-4 | move the ranges with the price during the day, sized for the time left to the same end date, and show the range made at the close next to them | Built |
+| FR-5 | rank every stock against the market for 5, 20 and 60 days after each close with the saved model, and show the position, the expected return versus SPY and what that part of the ranking did in testing | Built |
+| FR-6 | write every day's forecasts to a dated log before their outcomes are known | Built |
+| FR-7 | list SEC 8-K filings by event type and importance for each stock and for the market, refreshed once a day | Built |
+| FR-8 | show past earnings days, the next expected earnings date and a two-week earnings calendar | Built |
+| FR-9 | show analysts' 12-month price targets, rating counts and earnings versus estimates, labelled as opinions that are not tested | Built |
+| FR-10 | draw a price chart (line or candles, 1 week to 1 year, volume, the range cone ahead, earnings marks, values on pointing, full-window view) | Built |
+| FR-11 | let the user search by name or ticker, star stocks, sort (including by model rank) and filter to "earnings soon" | Built |
+| FR-12 | show a market overview: how many stocks rose and fell, biggest moves, calmest and wildest stocks, highest and lowest ranked, important filings | Built |
+| FR-13 | show a track record page: every range replayed on 2012–2024, said versus done by year, and what the site can and cannot tell | Built |
+| FR-14 | open with the data already on disk when there is no internet or an outside source fails | Built |
+| FR-15 | train the model once on all data with a known outcome, save it, and allow retraining with one command | Built |
+| FR-16 | run any model and feature set through the same walk-forward test and record the settings and results | Built |
+| FR-17 | audit the stock list against the price data after every rebuild | Built |
+| FR-18 | score the logged daily forecasts against what happened and show a live record | Planned |
+| FR-19 | add news sentiment, SEC event features, crash risk and recovery odds, each only after it passes its test | Planned |
+| FR-20 | answer questions about a stock in a chat, using the model's forecast and never the language model's own guess | Planned |
+| FR-21 | run as a hosted service with accounts and an API | Planned |
+
+### Quality requirements
+
+| ID | Requirement | How it is met or checked |
+|---|---|---|
+| NFR-1 | **No look-ahead.** A feature on day *t* uses only what was public by the close of *t* | Filing dates, first-filed values, index membership on that day, news after 4 pm counted for the next day; 43 automated tests, including "random data must show no skill" and "a planted signal must be found" |
+| NFR-2 | **Honest evaluation.** Every published number comes from the walk-forward test or the locked holdout | 60-day gap between training and test; same weekly dates for every model; holdout from 1 Jan 2025 excluded in code |
+| NFR-3 | **Honest wording.** No buy or sell calls, no accuracy percentage, no profit figure; "not investment advice" on the page | Track record page; claims table above |
+| NFR-4 | **Speed.** Price update about a minute; ranking under a minute; page data about 10 seconds; price on screen at most 20 seconds old plus the source's delay of up to 15 minutes | Measured on the development PC |
+| NFR-5 | **Keeps working.** A failed download never stops the dashboard; old prices are kept if most tickers fail; a failing analyst request affects only its card | Handled in `run_dashboard.py`, `live.py`, `analysts.py`; tests |
+| NFR-6 | **Same result twice.** Fixed random seeds, settings in one file, research data frozen, each run saved with its settings | `config/settings.yaml`, `results/` |
+| NFR-7 | **Private and local.** The server accepts connections from this computer only; no accounts and no personal data; API keys only in `.env` | `127.0.0.1` binding; `.gitignore` |
+| NFR-8 | **Runs on an ordinary PC.** Daily use needs no GPU and no PyTorch | NumPy scoring from saved weights |
+| NFR-9 | **Easy to change safely.** One feature code path for research and daily use; tests on every push | GitHub Actions |
+| NFR-10 | **Usable.** Light and dark themes, works at laptop and phone widths, keyboard search and stepping | Checked by screenshot at several sizes |
+
+### Limits and assumptions
+
+- S&P 500 stocks only; US regular market hours; market holidays are not known to the system (on a holiday it finds no new prices).
+- Free data: Yahoo and Tiingo prices are for research and personal use, and prices can be delayed by up to 15 minutes. A commercial launch needs a licensed feed keyed by a permanent security ID.
+- The sentiment scorer under test (FinBERT) is non-commercial; logos are trademarks loaded from an outside service, not stored.
+- One user on one PC. No hosted version, no accounts, no mobile app.
+- Fundamentals are as of the last download; a weekly refresh is not automated yet.
+- The intraday ranges are the closing ranges re-centred, not a separately tested model.
+
+## How the research pipeline works
+
+```mermaid
+flowchart LR
+    A[Prices] --> D[Point-in-time<br/>feature panel]
+    B[SEC fundamentals] --> D
+    C[Index membership<br/>on each day] --> D
+    D --> E[Walk-forward folds<br/>2012-2024, 60-day gap]
+    E --> F[Neural net, 3 seeds<br/>excess return vs SPY]
+    E --> G[Range models<br/>volatility, quantile XGBoost]
+    F --> H[Rank IC, hit rate,<br/>Diebold-Mariano vs Random Walk]
+    G --> I[Price ranges:<br/>coverage, width]
+```
+
+For each test year the model is trained on all earlier years, minus a 60-trading-day gap so that no training target overlaps the test year. Inside each training period the most recent part is held back as a validation set; validation and test scores are close (20 days: 0.020 vs 0.020; 5 days: 0.016 vs 0.015; 60 days: 0.023 vs 0.020), so the model is not just memorising. The **2025–26 holdout is locked** and will be run once, when the model is final. The daily model learns from every date with a known outcome, including 2025–26, but that period is never used to test or choose anything: the holdout test will train its own model on data to 2024.
+
+### Data honesty
+
+On 12 Nov 2026 a bug was found: the stock list had been frozen at the January 2019 index membership. It was fixed, the list rebuilt, and every price history audited against the index ([`scripts/audit_universe.py`](scripts/audit_universe.py)).
+
+- **Coverage of the true index:** 81% → 98% of members have prices in the test years (average 91%); 67% in the early training years. Missing stocks are mostly companies that were taken over or failed, so early years lean towards survivors.
+- **Wrong-company histories:** free data keyed by ticker symbol shows a reused symbol's history as the latest owner's. The audit found six such cases (one inside the test years) by comparing each stock's trading volume with other index members; all are removed.
+- Details: [`docs/data-sources.md`](docs/data-sources.md), [`docs/decisions.md`](docs/decisions.md).
 
 ## How it compares with the market
 
@@ -92,83 +396,9 @@ No credible tool claims to call direction right 90% of the time. Commercial AI s
 | Prospero.ai | 54% win rate vs the S&P 500, about 5,000 picks | Self-reported |
 | AltIndex | 70% win rate, 22% average gain over six months | Self-reported, no benchmark |
 | Research (finance-pretrained models, 2025) | 51.74% direction accuracy, next day | All US stocks; published study |
-| **LatticeIQ v1.0** | **50.6% direction, rank IC 0.019 (t 2.95), 20 days** | **Every stock, every week, 13 walk-forward years, S&P 500 only** |
+| **LatticeIQ v1.0** | **50.7% direction, rank IC 0.020 (t 3.18), 20 days** | **Every stock, every week, 13 walk-forward years, S&P 500 only** |
 
 The numbers are not directly comparable: marketing figures cover top picks in a rising market, ours cover every stock in every test year. Measured their way, our top group only matches the market today, and that is the main thing to improve. Full table, sources and a checklist for reading any accuracy claim: [`docs/market-comparison.md`](docs/market-comparison.md).
-
-## App structure
-
-```mermaid
-flowchart TB
-    subgraph L1["① Data layer — daily download"]
-        direction LR
-        D1[Prices<br/>Tiingo + Yahoo] --- D2[SEC EDGAR<br/>fundamentals] --- D3[SEC 8-K<br/>company events] --- D4[S&P 500<br/>membership history]
-    end
-    subgraph L2["② Feature store — point-in-time"]
-        F1[44 features per stock per day<br/>price and volume 17 · fundamentals 15 · sector 12]
-    end
-    subgraph L3["③ Model layer — trained on Kaggle GPU"]
-        direction LR
-        M1[Neural net v1.0<br/>excess return + rank] --- M2[Quantile XGBoost<br/>price ranges] --- M3[Crash risk · recovery<br/>in testing]
-    end
-    subgraph L4["④ Daily forecast job"]
-        J1[Forecast table: rank · expected return · 50/80/90% range · top drivers]
-    end
-    subgraph L5["⑤ Delivery"]
-        direction LR
-        U1[Dashboard] --- U2[Chat assistant] --- U3[Live track record]
-    end
-    L1 --> L2 --> L3 --> L4 --> L5
-```
-
-| Layer | Code | Status |
-|---|---|---|
-| ① Data | `src/ingest/`, `scripts/build_universe.py`, `scripts/audit_universe.py` | ✅ prices, fundamentals, 8-K events, audited stock list · ⏸ news |
-| ② Features | `src/features/` | ✅ 44 features, leakage-tested · ⏳ 8-K event features |
-| ③ Models | `src/models/`, `scripts/run_experiment.py`, `scripts/run_brackets.py` | ✅ v1.0 neural net, price ranges · ⏳ crash risk, recovery |
-| ④ Forecast job | `scripts/forecast_today.py` | ⏳ next |
-| ⑤ Dashboard / chat | `app/` | ⏳ next |
-
-Tested and left out because they did not help: economy-wide (macro) features, Kronos and TimesFM pretrained forecasts, a ranking objective, LightGBM, ridge, and an XGBoost + neural-net ensemble. Reasons and numbers: [`docs/decisions.md`](docs/decisions.md).
-
-### What one forecast looks like
-
-```json
-{
-  "date": "2024-12-18", "ticker": "EXAMPLE", "horizon_days": 20,
-  "expected_excess_return_vs_spy": 0.012,
-  "rank_percentile": 0.91,
-  "rank_group": "top 20%",
-  "rank_group_history": "beat SPY 49.9% of the time; bottom 20%: 48.0%",
-  "price_range": { "50%": [101.2, 107.9], "80%": [97.6, 111.8], "90%": [95.3, 114.6] },
-  "top_drivers": ["12-month momentum", "free-cash-flow yield", "sector momentum"]
-}
-```
-<sub>Illustrative example of the output format, not a real forecast.</sub>
-
-## How it works
-
-```mermaid
-flowchart LR
-    A[Prices] --> D[Point-in-time<br/>feature panel]
-    B[SEC fundamentals] --> D
-    C[Index membership<br/>on each day] --> D
-    D --> E[Walk-forward folds<br/>2012-2024, 60-day gap]
-    E --> F[Neural net, 3 seeds<br/>excess return]
-    E --> G[Quantile XGBoost<br/>+ conformal calibration]
-    F --> H[Rank IC, hit rate,<br/>Diebold-Mariano vs Random Walk]
-    G --> I[Price ranges:<br/>coverage, width]
-```
-
-**No look-ahead** is the key design rule: every feature on date *t* uses only information public by the close of *t* (filing dates, data revision dates, index membership on that day). 33 automated tests check this, including "random data must show no skill" and "a planted signal must be found". Inside each training period the most recent part is held back as a validation set; validation and test scores are close (20 days: 0.021 vs 0.019), so the model is not just memorising. The **2025–26 holdout is locked** and will be run once, when the model is final.
-
-### Data honesty
-
-On 12 Nov 2026 a bug was found: the stock list had been frozen at the January 2019 index membership. It was fixed, the list rebuilt, and every price history audited against the index ([`scripts/audit_universe.py`](scripts/audit_universe.py)).
-
-- **Coverage of the true index:** 81% → 98% of members have prices in the test years (average 91%); 67% in the early training years. Missing stocks are mostly companies that were taken over or failed, so early years lean towards survivors.
-- **Wrong-company histories:** free data keyed by ticker symbol shows a reused symbol's history as the latest owner's. The audit found six such cases (one inside the test years) by comparing each stock's trading volume with other index members; all are removed.
-- Details: [`docs/data-sources.md`](docs/data-sources.md), [`docs/decisions.md`](docs/decisions.md).
 
 ## More results
 
@@ -177,12 +407,12 @@ On 12 Nov 2026 a bug was found: the stock list had been frozen at the January 20
   <img alt="Rank IC for each early setup on 466 stocks, from price only at 0.0128 to a trust-weighted ensemble at 0.0199" src="docs/assets/ablation_light.png" width="100%">
 </picture>
 
-| Model, 20 days, corrected list (727 stocks) | Hit rate | Rank IC | t-stat |
+| Model, 20 days, audited list (722 stocks) | Hit rate | Rank IC | t-stat |
 |---|---|---|---|
 | Random Walk (baseline) | 50.0% | 0 | — |
-| XGBoost | 50.5% | 0.0086 | 1.11 |
-| Ensemble (XGBoost + neural net, trust-weighted) | 50.5% | 0.0175 | 2.30 |
-| **Neural net, 3 seeds (v1.0)** | **50.6%** | **0.0192** | **2.95** |
+| XGBoost | 50.5% | 0.0067 | 0.86 |
+| Ensemble (XGBoost + neural net, weighted by recent skill) | 50.5% | 0.0173 | 2.34 |
+| **Neural net, 3 seeds (v1.0)** | **50.7%** | **0.0197** | **3.18** |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bracket_coverage_dark.png">
@@ -194,7 +424,7 @@ On 12 Nov 2026 a bug was found: the stock list had been frozen at the January 20
   <img alt="Average width of the 80% price range for a 100 dollar stock: plus or minus 4.7% over 5 days, 9.9% over 20 days, 17.6% over 60 days; the real price fell inside about 80% of the time at each horizon" src="docs/assets/horizons_light.png" width="100%">
 </picture>
 
-**Price ranges** (earlier 634-stock list): the 80% range contained the real price 79.8% / 80.3% / 80.2% of the time at 5 / 20 / 60 days (naive normal model: 79.3% / 77.5% / 76.5%), and the 90% range 90.0% / 90.4% / 90.8% (naive: 87.5% / 86.6% / 86.0%).
+**Price ranges.** The two charts above show the first range model (quantile XGBoost, earlier 634-stock list): its 80% range held 79.8% / 80.3% / 80.2% of the time at 5 / 20 / 60 days (naive normal model: 79.3% / 77.5% / 76.5%). The volatility range model now in the dashboard held 79.5% / 79.0% / 79.1% with a typical width of ±4.6% / ±9.5% / ±16.6%, and 77–79% in earnings weeks where a one-size range holds only 57%. A side-by-side run of both on the audited list is still to do.
 
 A rank IC of 0.01–0.05 is typical for honest stock forecasting. All tables and limitations: [`docs/results.md`](docs/results.md).
 
@@ -206,7 +436,7 @@ cd LatticeX
 python -m venv .venv
 .venv\Scripts\activate            # Windows cmd  (PowerShell: .venv\Scripts\Activate.ps1, macOS/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
-pytest -q                          # 33 tests, ~4 minutes, no data or keys needed
+pytest -q                          # 43 tests, ~5 minutes, no data or keys needed
 ```
 
 Try the full pipeline on synthetic data (no keys needed):
@@ -219,22 +449,45 @@ python -m scripts.run_brackets  --data synthetic --signal volcluster
 
 Real data needs API keys in `.env` (copy `.env.example`, check with `python -m scripts.check_keys`). How to download and rebuild the data: [`data/README.md`](data/README.md). After any rebuild run `python -m scripts.audit_universe`. Heavy jobs run on Kaggle's free GPUs: [`docs/kaggle-workflow.md`](docs/kaggle-workflow.md).
 
+## Daily use
+
+```bash
+python -m scripts.kaggle_cloud final-model   # once (repeat monthly or quarterly): train v1.0 on all data, save models/latticeiq_v1.npz
+python -m scripts.run_dashboard              # every day: prices update, the saved model ranks every stock, http://localhost:8600 opens
+```
+
+Each start downloads the latest closing prices (about a minute, only when a newer trading day exists), checks the SEC for new filings once a day, ranks every stock and builds the page. Left running, it shows today's prices while the US market is open and rolls the forecasts forward by itself after the close. Double-click `start_dashboard.bat` to run it in a minimised window. Every day's ranks are also written to `data/live/forecasts/`, so each forecast is on record before its outcome is known.
+
+| Page | What it shows |
+|---|---|
+| Overview | How many stocks rose and fell, a two-week earnings calendar, the day's biggest moves, the calmest and wildest stocks for the chosen look-ahead, the highest and lowest ranked stocks, important SEC filings |
+| Stocks | Any S&P 500 stock: today's price, the likely price range in 5, 20 and 60 trading days, a chart with the range cone ahead, earnings marks, the model's rank against the market, recent filings, and what analysts expect in 12 months. Search by name or ticker, star stocks, sort by rank, filter to "earnings soon" |
+| Track record | Every range replayed on 2012–2024: said versus done, year by year, and what the site can and cannot tell you |
+
+Details of every part of the page: [`app/README.md`](app/README.md).
+
 ## Repository layout
 
 ```
 LatticeX/
-├── config/            settings.yaml (horizons, folds, model params) + stock universe with S&P 500 membership dates
+├── config/            settings.yaml (horizons, folds, model settings) + stock list with S&P 500 membership dates
 ├── src/
-│   ├── ingest/        downloaders: Tiingo and Yahoo prices, SEC EDGAR fundamentals, SEC 8-K events, FRED, Benzinga
+│   ├── ingest/        downloaders: Tiingo and Yahoo prices, daily prices (live), analyst views, SEC fundamentals,
+│   │                  SEC 8-K events, FRED, news (Alpaca)
 │   ├── data/          calendar alignment, synthetic test data
 │   ├── features/      price, fundamentals, sector (in the model); macro, news, pretrained forecasts (tested)
-│   ├── models/        Random Walk, XGBoost, neural net and ensemble, Kronos and TimesFM runners
+│   ├── models/        production (daily model), vol_ranges (price ranges), neural net and ensemble, XGBoost,
+│   │                  Random Walk, ARIMA, Kronos and TimesFM runners
+│   ├── news/          sentiment scoring
 │   ├── eval/          metrics: hit rate, rank IC + Newey-West t, Diebold-Mariano
 │   ├── targets.py     future excess return vs SPY
 │   ├── folds.py       walk-forward folds with gap, holdout lock
 │   └── universe.py    point-in-time S&P 500 membership
 ├── scripts/           run_experiment, run_brackets, run_crash_risk, run_recovery, kaggle_cloud,
-│                      build_universe, audit_universe, check_keys
+│                      build_universe, audit_universe, check_keys,
+│                      train_final (train the daily model), score_today (rank today's stocks),
+│                      export_dashboard (build page data), run_dashboard (local server)
+├── app/               the dashboard (plain HTML, CSS and JavaScript; page data built locally, not committed)
 ├── kaggle/            code that runs inside Kaggle notebooks
 ├── tests/             leakage and correctness tests (run on every push by GitHub Actions)
 ├── results/           experiment summaries (metrics CSV/JSON; predictions are not committed)
@@ -243,23 +496,43 @@ LatticeX/
 └── docs/              architecture, data sources, results, decisions, market comparison, progress log
 ```
 
-| Doc | For whom |
+| Doc | Use it for |
 |---|---|
-| [`docs/architecture.md`](docs/architecture.md) | How the pipeline fits together, leakage rules |
-| [`docs/data-sources.md`](docs/data-sources.md) | Every data source, licence, coverage of the real index, known gaps |
-| [`docs/decisions.md`](docs/decisions.md) | **Which models and features are in or out, and why**; data errors found and fixed |
+| [`docs/project-flow.md`](docs/project-flow.md) | **Start here.** The project step by step: what was done, why, the result, the evidence, and what is next |
+| [`docs/architecture.md`](docs/architecture.md) | Design detail: pipeline, evaluation rules, look-ahead rules, daily model, range model, server |
+| [`docs/decisions.md`](docs/decisions.md) | **Which models and features are in or out, and why**; data errors found and fixed; product decisions |
 | [`docs/results.md`](docs/results.md) | All results tables and limitations |
+| [`docs/data-sources.md`](docs/data-sources.md) | Every data source, licence, coverage of the real index, known gaps |
 | [`docs/market-comparison.md`](docs/market-comparison.md) | What competitors and research claim, and how we compare |
 | [`docs/kaggle-workflow.md`](docs/kaggle-workflow.md) | Running jobs on Kaggle GPUs from a PC |
+| [`app/README.md`](app/README.md) | The dashboard in detail |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | What is done, TODO, work log |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Rules for changes, branches, commits |
 
 ## Roadmap
 
-- **Now:** final v1.0 run and price ranges on the audited stock list; crash-risk and recovery models; SEC 8-K event features; a finance-pretrained model (FinText) as an extra input; sector-neutral target. Each is kept only if it beats v1.0 on the same test years.
-- **Next:** daily forecast job, dashboard, chat assistant, live track record, one-time 2025–26 holdout test.
-- **Before a launch:** licensed price data keyed by a permanent security ID (free data is research-only), legal review of every performance statement.
+- **Now:** test news sentiment and SEC event features against v1.0; price ranges on the audited list; crash-risk and recovery runs; sector-neutral target; a finance-pretrained model (FinText) as an extra input. Each is kept only if it beats v1.0 on the same test years.
+- **Next:** live record from the daily forecast log, weekly refresh of fundamentals, chat assistant, one-time 2025–26 holdout test.
+- **Before a launch:** licensed price data keyed by a permanent security ID (free data is research-only), a commercially licensed sentiment model, hosting with accounts, legal review of every performance statement.
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| Excess return | A stock's return minus SPY's (the S&P 500 fund) over the same days |
+| Horizon | How far ahead a forecast looks: 5, 20 or 60 trading days |
+| Rank IC | How well the predicted order of stocks matched the real order on each date, averaged. 0 = no skill; 0.01–0.05 is typical for honest stock forecasting |
+| t-statistic | How sure we are the rank IC is not zero; about 2 or more counts as significant |
+| Hit rate | Share of forecasts with the right direction against the market; 50% is a coin flip |
+| Walk-forward test | Train on the past, test on the next year, move one year forward, repeat |
+| Gap (embargo) | 60 trading days left out between training and test so no outcome overlaps |
+| Holdout | 2025–26: kept untouched for one final test |
+| Universe v2 | The audited list of S&P 500 members since 2000 with their price histories (722 stocks) |
+| Point-in-time | Using only what was known on that day |
+| Trust factor *k* | A number from 0 to 1 that scales each forecast by how well the model did on its latest training years |
+| Coverage | How often the real price ended inside a range; an 80% range should score about 80% |
+| 8-K | The SEC form a company files when something important happens |
 
 ## Licence
 
-Code: [MIT](LICENSE). Data is **not** included: Tiingo, Yahoo, Benzinga and other providers have their own terms. Pretrained models keep their licences (Kronos MIT, TimesFM Apache 2.0; FinBERT is used for research only).
+Code: [MIT](LICENSE). Data is **not** included: Tiingo, Yahoo, Alpaca/Benzinga and other providers have their own terms. Pretrained models keep their licences (Kronos MIT, TimesFM Apache 2.0; FinBERT is used for research only).

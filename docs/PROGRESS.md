@@ -1,129 +1,61 @@
 # LatticeIQ — Progress & TODO
 
-_Last updated: 11 Nov 2026 · Owner: project lead (all roles)_
+_Last updated: 16 Nov 2026 · Owner: project lead (all roles)_
 Rule: update this file every time something is finished, decided or found. Newest log entries at the top.
+**New to the project?** Read [`project-flow.md`](project-flow.md) first: the whole project as one step-by-step story with the status of each step. This file is the working to-do list and the day-by-day log.
 
 ---
 
-## Where we are (one-line status)
+## Where we are
 
-**Stage A (data) ~95% · Stage B (dataset) 100% · Stage C (models) ~90% — v1.0 locked · App 0%.**
-Data, features, leakage tests, walk-forward evaluation, XGBoost, price brackets and Kronos forecasts are done. Now: Kronos comparison run (queued on Kaggle), TimesFM, then lock the final model and build the dashboard.
+**Steps 1–10 of 15 done.** The ranking model v1.0 is chosen and measured (rank IC 0.015 / 0.020 / 0.020 at 5 / 20 / 60 days, 13 test years, audited list of 722 stocks), trained once on all data and run every day on the PC behind a three-page dashboard with live prices, price ranges, filings and analyst views. **Now (step 11): testing news sentiment against v1.0.**
 
-| Stage (design doc) | Status |
-|---|---|
-| A. Collect data | Prices 466 stocks + 18 ETFs (Tiingo, A–PCAR) ✅ · FRED macro ✅ · EDGAR fundamentals ✅ · Benzinga news ⏸ (too sparse, FYP-2) · Kronos forecasts 2010–2024 ✅ |
-| B. Build dataset | Price 17 + macro 8 + fundamentals 15 + sector 12 + Kronos 2 features ✅ · Targets ✅ · Folds + holdout lock ✅ · 19 leakage tests ✅ |
-| C. Models | Random Walk ✅ · XGBoost + shrinkage ✅ · Price brackets + P(up) ✅ · Kronos zero-shot ✅ (comparison queued) · ARIMA ⏳ · TimesFM ⏳ · ensemble ⏳ |
-| D. Holdout test (2025–26) | Locked, untouched until end of FYP-2 ✅ |
-| E. Daily run + app | Not started (dashboard planned 14–20 Nov) |
-| Repo | GitHub `Naveed-CoLab/LatticeX` organised: README, docs, CI tests, issue/PR templates ✅ |
-
-## FYP-1 vs FYP-2 scope (agreed 8 Nov)
-**FYP-1 (now → ~28 Nov): built right, measured honestly.** Data pipeline + data-quality report · leakage tests, walk-forward, baselines (RW + ARIMA) · return-ranking model (price + macro + fundamentals) · **price brackets + P(up), calibrated** · ablation + statistics · simple dashboard demo · report with limitations + FYP-2 plan.
-**FYP-2 (next semester): bigger, better, deployed.** Full ~680 stocks + commercial data · Kronos/TimesFM · news at scale + own sentiment model · ensemble/regimes · API with keys, daily automation, deployment · LLM explanations, full portfolio engine · **final 2025–26 holdout test (kept locked until then)**.
-
-## 20-day plan (FYP-1, 8 Nov → ~28 Nov 2026)
-| Days | Dates | Work | Done when |
-|---|---|---|---|
-| 1–3 | 8–11 Nov | Kaggle runs (price vs +macro) · news chunks downloading · **price brackets + volatility + P(up), conformal calibration** | bracket coverage/width table logged |
-| 3–7 | 11–15 Nov | **EDGAR fundamentals** (code ✅ 8 Nov) → run download → ablation on returns AND brackets | +fundamentals rows logged |
-| 7–9 | 15–17 Nov | ARIMA baseline once · light ensemble (XGB seeds + LightGBM) · feature importance/SHAP · data-quality report · (stretch) news ablation on well-covered years | FYP-1 config chosen |
-| 9–12 | 17–20 Nov | **Streamlit demo**: stock page (forecast, price brackets, P(up), drivers), ranking table, simple portfolio risk | demo runs |
-| 12–17 | 20–25 Nov | Report: data, method, results, limitations, FYP-2 plan | draft done |
-| 18–20 | 26–28 Nov | Slides, rehearsal, buffer | — |
-Actions this week: ask supervisor for the marking criteria + confirm scope; consider 1-month Tiingo upgrade to remove the A–PCAR gap.
-
-## Accuracy roadmap (agreed 6 Nov) — add one at a time, measure each (ablation)
-| # | Step | Expected gain |
+| # | Step (details in [`project-flow.md`](project-flow.md)) | Status |
 |---|---|---|
-| 1 | Full universe (~680 stocks) | makes results measurable |
-| 2 | EDGAR fundamentals: earnings yield, ROE, gross margin, growth, debt, earnings surprise | large (20–60 d) |
-| 3 | Benzinga news + FinBERT: sentiment 1/5/20 d, article count, sentiment surprise, news shock; after 4 pm ET → next day | medium (5–20 d) |
-| 4 | Earnings-date features: days since/until earnings, last earnings reaction (post-earnings drift) | medium |
-| 5 | Sector-relative ranks (sector from SEC SIC codes) | small–medium |
-| 6 | Kronos + TimesFM forecasts as features | research question |
-| 7 | Tuning: ranking objective, Optuna inside folds, seed averaging | small |
-| 8 | Regime ensemble + isotonic calibration | fewer big errors |
-Realistic final target: rank IC 0.03–0.06, hit rate 52–55%. Choose features on 2012–2024 folds only; never peek at 2025–26.
+| 1 | Define the question and how to score it | ✅ |
+| 2 | Build the test bench before any model (43 tests) | ✅ |
+| 3 | Collect the data (prices, fundamentals, 8-K filings, membership) | ✅ |
+| 4 | Turn data into features (44) | ✅ |
+| 5 | Compare models | ✅ |
+| 6 | Choose and lock v1.0 | ✅ |
+| 7 | Find the data error, audit, freeze "universe v2", re-measure | ✅ |
+| 8 | Price ranges (volatility range model in the product) | ✅ |
+| 9 | Dashboard | ✅ |
+| 10 | Run it every day (live prices, train once / score daily, forecast log) | ✅ |
+| 11 | Improve the model, one test at a time | 🔄 news first |
+| 12 | Live track record from the forecast log | ⏳ |
+| 13 | Holdout test 2025–26, once | ⏳ 🔒 |
+| 14 | Report and presentation | ⏳ by 28 Nov |
+| 15 | Before a launch | ⏳ |
 
-Daily automation (later): Windows Task Scheduler, weekdays ~2 pm PT → Tiingo + Benzinga update → FinBERT on new articles (CPU) → features → frozen model → forecasts.
+## To do, in order
 
----
+1. [ ] **Rotate keys** pasted in chat (Benzinga, FRED, Hugging Face, Tiingo, Kaggle, Alpaca) and update `.env`. Then delete the `Claude outputs` folder on the PC (it holds old copies of `.env`; it is never committed).
+2. [ ] **Publish** the work since 14 Nov to GitHub (safety check first, see the README's quick start and `CONTRIBUTING.md`).
+3. [ ] **News:** `python -m src.ingest.alpaca_news --start 2015-01` → `--combine` → `python -m scripts.kaggle_cloud upload-data` → `news-score` → `upload-data` → compare with and without `--news` on test years 2018–2024 at 5 and 20 days. Keep only if it beats v1.0 clearly, in most years.
+4. [ ] **Sector-neutral target** on Kaggle (`--target sector`) vs v1.0.
+5. [ ] **Price ranges on universe v2:** 5 and 20 days ran on 15 Nov (results to write up); 60 days failed on a typo, rerun: `python -m scripts.kaggle_cloud brackets "--data real --fundamentals --horizon 60"`. Then compare with the volatility range model.
+6. [ ] **Crash risk and recovery** on real data (`kaggle_cloud crash ...`, `kaggle_cloud recovery ...`).
+7. [ ] **Live track record:** score `data/live/forecasts/` against outcomes once a week of logs exists; show on the Track record page.
+8. [ ] **Weekly fundamentals refresh** (`python -m src.ingest.edgar`); scoring uses fundamentals as of the last download.
+9. [ ] SEC 8-K events as model inputs (filings already downloaded).
+10. [ ] FinText finance-pretrained Chronos: runner and comparison.
+11. [ ] ARIMA baseline (for the report).
+12. [ ] Retrain the daily model monthly or quarterly: `python -m scripts.kaggle_cloud final-model`.
+13. [ ] **Holdout test**, once, when the model is final.
+14. [ ] **Report and slides.**
 
-## TODO
-
-> **Team note (6 Nov):** One person is doing all roles (data, models, app). Tasks are in the order to do them.
-
-### Now — in this order
-1. [x] Code: build S&P 500 universe since 2000 with membership dates (`scripts/build_universe.py`)
-2. [x] Code: Tiingo coverage check for delisted stocks (inside build_universe → `config/universe_report.csv`)
-3. [x] **Run** `python -m scripts.build_universe` → 979 members since 2000; current members 95% covered, **departed members only 47% covered**
-4. [x] **Check Tiingo plan** → FREE tier: 50 requests/hour, 1,000/day, 2 GB bandwidth/month. Full download ≈13 h (run overnight), ≈1 GB. Free = personal use only → paid plan needed before public demo/selling
-4b. [~] **Run** `python -m src.ingest.tiingo` → 502/695 done; blocked by 500-symbol monthly cap
-4c. [ ] **Decide**: upgrade Tiingo (finish today) OR wait until 1 Dec for the remaining 193 (P–Z). Meanwhile run experiments on the 502
-5. [x] Membership filter (`src/universe.py`, used in run_experiment)
-6. [x] Score stocks and ETFs separately (`--asset stock|etf`, ranks within each group)
-7. [x] Macro features (`src/features/macro.py`, 8 features, point-in-time) + beta & idiosyncratic volatility
-8. [x] Prediction shrinkage (k per fold; 0 = fall back to Random Walk)
-9. [ ] **Run** the ablation on the full universe and record both rows below:
-       `python -m scripts.run_experiment --data real --no-macro` then `python -m scripts.run_experiment --data real`
-10. [ ] **Run** `python -m scripts.run_experiment --data real --asset etf`
-11. [ ] Delisted coverage is 47% (< 70%) → decide: (a) accept + document survivorship bias and measure it, (b) map renamed symbols by hand for the biggest departed names, or (c) buy a delisted-inclusive source (Norgate / Sharadar). See universe_report.csv
-
-### App track (after the model reruns, or when you need a break from models)
-- [ ] Database tables (forecasts, user holdings) + FastAPI skeleton
-
-### Next
-- [x] Comparison: price / +fund / +sectors / +rank → best = fund + sectors (IC 0.014, t 1.80)
-- [ ] **Run** horizons: `experiments "--data real --fundamentals --sectors --horizon 5" "--data real --fundamentals --sectors --horizon 60"`
-- [ ] Run ARIMA baseline on real data (`--models random_walk xgboost arima`, ~1–2 h)
-- [ ] Try `target_transform: rank` in `config/settings.yaml`, compare
-- [ ] Kaggle scripts: upload data, run Kronos-small vs Kronos-mini timing, download results
-- [x] Kronos pipeline code (zero-shot) ✅
-- [x] `kronos --timing` (v1): works, too slow + noisy → fixed
-- [x] `kronos --timing` v4 ✅: 4.6 forecasts/s per GPU × 2 → full 2010–2024 ≈ 1.6 GPU h
-- [x] `kronos --years 2010 2024` ✅: 59,699 forecasts, 189 dates, 1.74 GPU h
-- [x] Comparison ✅: Kronos alone IC 0.0087 (t 0.81); XGBoost + Kronos 0.0147 (t 1.83) vs 0.0140 → no reliable gain, Kronos not in final model
-- [x] TimesFM 2.5 zero-shot runner + features + tests ✅
-- [x] `timesfm --timing` ✅: 136 forecasts/s → full run ≈ 0.45 GPU h
-- [x] `timesfm --years 2010 2024` ✅: 239,117 weekly forecasts, 23 GPU min
-- [x] TimesFM comparison ✅: alone IC −0.0017; + XGBoost 0.0128 < 0.0140 → OUT
-- [ ] TimesFM 2.5 zero-shot (same pattern) → comparison row
-- [ ] FinText finance-pretrained Chronos-Small (yearly versions): runner + Kaggle job + comparison vs v1.0 (after the universe rebuild)
-- [x] ~~Fine-tune Kronos on US stocks~~ dropped 13 Nov (evidence: fine-tuning general models barely helps; see decisions.md)
-- [ ] EDGAR fundamentals ingest (first-filed values, TTM) → fundamental features
-- [x] Code: Benzinga news ingest → FinBERT on Kaggle → news features (`--news`)
-- [x] Price brackets code (run on real data: `python -m scripts.kaggle_cloud brackets "--data real"`)
-- [x] Brackets on real data (20d): coverage 80.1 / 90.2 / 49.4 % ✅
-- [ ] Rerun brackets with calibrated P(up), plus 5d and 60d horizons
-- [x] **Run** news-probe on Kaggle → news from **2010** (plan: 25 articles/page)
-- [~] **Run** news-download on Kaggle: 2010–2014 ✅ (7,250, sparse) · 2015–2019 ⏳ · 2020–2026 ⏳ → then `--report`
-- [ ] **Run** `python -m scripts.kaggle_news all` (FinBERT on Kaggle)
-- [ ] **Run** ablation: `run_experiment --data real --start-year <Y>` vs `--news --start-year <Y>`; record both
-- [ ] Ablation table: price → +macro → +fundamentals → +news → +Kronos/TimesFM
-
-### Later
-- [ ] Regime rules (VIX high/low × SPY vs 200-day average)
-- [ ] Regime-weighted ensemble (shrink weights toward equal)
-- [ ] Probability calibration (isotonic) + calibration plot
-- [ ] SHAP explanations → LLM explanation layer (needs LLM API key)
-- [ ] Long-short backtest after trading costs
-- [ ] Model freeze → run 2025–26 holdout ONCE
-- [ ] Daily batch job, portfolio engine, dashboard, live prediction log
-
-### Before launch / housekeeping
-- [ ] Create private GitHub repo
-- [ ] Get LLM API key (Anthropic or OpenAI)
-- [ ] Ask Benzinga how many years of history the plan includes
-- [ ] Rotate ALL keys (Benzinga, FRED, Hugging Face, Tiingo, Kaggle) — they were pasted in chat
-- [ ] Delete `Claude outputs` folder (contains key copies)
-- [ ] Replace FinBERT before selling (non-commercial licence)
-- [ ] Securities lawyer review before showing buy/sell suggestions to users
+### Later / before a launch
+- [ ] Licensed price and news data keyed by a permanent security ID.
+- [ ] Replace FinBERT (non-commercial licence).
+- [ ] Hosting, accounts, API; chat assistant that explains the model's forecast.
+- [ ] Long-short backtest after trading costs.
+- [ ] Securities lawyer review of every performance statement; no buy/sell suggestions.
+- [ ] Regime models; insider trading (Form 4), short interest, option-implied volatility as inputs.
 
 ---
 
-## Results log
+## Early results log (6–9 Nov, earlier stock lists; current numbers in [`results.md`](results.md))
 
 | Date | Run | Universe | Features | Model | Hit rate | Rank IC (t) | Notes |
 |---|---|---|---|---|---|---|---|
@@ -145,11 +77,152 @@ Daily automation (later): Windows Task Scheduler, weekdays ~2 pm PT → Tiingo +
 | 6 Nov 2026 | synthetic, no signal | 60 fake | price | XGBoost | 49.7% | −0.006 (−0.8) | leak check ✅ |
 | 6 Nov 2026 | synthetic, planted momentum | 60 fake | price | XGBoost | 53.9% | 0.108 (14.3) | can-find-signal check ✅ |
 
-Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 vs Random Walk.
+Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached so far (v1.0): rank IC 0.015–0.020 with t 2.2–3.2, hit rate 50.5–51.0%.
 
 ---
 
 ## Work log (newest first)
+
+### 16 Nov 2026 — News download made about 5 times faster; price-range run at 60 days found failed
+- The first version fetched every article (about 12,000 a month) to keep the third that name our stocks, one request at a time: about 1 request a second, 10 hours in all. It now asks Alpaca only for articles naming our stocks (in groups of 200 tickers, Alpaca spelling `BRK.B`) and fetches 3 months at once, staying under the 200-a-minute limit: about 95 requests a month instead of 240, three in parallel. The six months already saved are kept (same content, fetched the old way).
+- If Alpaca refuses the long request, the message says to add `--group 50`.
+- The 15 Nov price-range runs on universe v2 finished at 5 and 20 days; the 60-day run never started (a typo in the command, `--horizon 60python`). To rerun, and the 5/20-day results still have to be written up.
+
+### 16 Nov 2026 — Docs cleaned up before publishing; one step-by-step guide added
+- New `docs/project-flow.md`: the whole project as 15 steps (question, test bench, data, features, model comparison, v1.0, data error and audit, price ranges, dashboard, daily running, improvement tests, live record, holdout, report, launch), each with why, what was done, the result, the evidence and its status. Linked from the README ("start here") and from this file.
+- This file: the status and to-do section at the top rewritten (it still said "waiting for the training run" and listed tasks finished days ago). Early results log, decisions and known issues brought up to date. The day-by-day log below is unchanged.
+- `decisions.md`: models that were once "final" are marked *replaced*, v1.0 and the volatility range model stated as current, news marked in testing, SEC 8-K features marked "data downloaded, features not written".
+- `results.md` limits and pending list, `data-sources.md`, `data/README.md` (folder layout incl. `data/live`), `kaggle-workflow.md` (`final-model`, `news-score`), `kaggle/README.md`, `models/README.md`, `CONTRIBUTING.md`, README status rows corrected.
+- Checked before publishing: GitHub has the work up to 14 Nov and nothing private in its history; every file on the PC matches the working copy except `config/universe*.csv` (the PC's are the current ones); `.gitignore` keeps out `.env`, `kaggle.json`, `Claude outputs/`, `data/`, `models/*`, `app/data/`, logs, the design PDF and `test_keys.py`.
+
+### 16 Nov 2026 — README and architecture doc rewritten for the current system
+- `README.md`: status table; what the product gives and does not give; **models picked and dropped with their numbers** in one place (in the product, tested and dropped, written but not measured); system architecture diagram (PC, Kaggle, browser), the 12 components with what each reads and writes, the daily cycle, the server's three endpoints, every data file with its columns, technology; **requirements** (users, 21 functional requirements marked built or planned, 10 quality requirements, limits and assumptions); glossary. Enough to write an SRS and an SDS from.
+- `docs/architecture.md`: brought up to date and extended: research half and daily half, features by name, the v1.0 network and its training, evaluation and look-ahead rules, both range models, the daily model (training, joining prices, scoring), daily price rules, the local server, the dashboard, failure handling.
+- Corrected in passing: the range model shown in the product is the volatility range model (the README still named quantile XGBoost); the daily rank is connected (the dashboard README said it was not); the full training took 6 minutes, not 15.
+- All three diagrams were rendered to check they draw.
+
+### 16 Nov 2026 — News: Alpaca has enough; download and merge built
+- Probe result (run on the PC): 435–869 articles on the sampled days of 2015–2021, naming 65–142 of about 500 index members; 843–1,144 a day in 2022 to March 2026, naming 125–168. Thinnest in 2018–2019 (about 13% of members), 15% or more on 13 of 15 sampled days. Enough to test, unlike the direct Benzinga plan (about 2 a day).
+- Found in the probe: the last week has 2,800–3,000 articles a day because a second publisher, fiscal.ai, appears (1,500–2,000 a day). Only Benzinga articles are kept so the news counts mean the same thing in every year. The publisher is blank before 2022 (all Benzinga then) and is kept.
+- `python -m src.ingest.alpaca_news --start 2015-01`: downloads month by month (headline and summary, only articles naming a stock of our list), about 60,000 requests, several hours. Each finished month is saved; stopping and running the same command again continues. It slows itself down before the per-minute limit.
+- `python -m src.ingest.alpaca_news --combine`: one file in the columns the news features already read, `data/clean/news_articles.parquet`, and a table of articles and stocks per year. The earlier thin file is kept once as `news_articles_benzinga_plan.parquet`.
+- Checked with a stand-in for the service: two months download, a second run asks for nothing, the merged file feeds the existing news features. 43 tests pass (1 new). The real download has not been run yet.
+- Next, in order: download → combine → `python -m scripts.kaggle_cloud upload-data` → `news-score` (sentiment on Kaggle's GPU) → compare with and without `--news` on test years 2018–2024 at 5 and 20 days. News goes into the model only if it beats v1.0 by clearly more than chance (see results section 0).
+- Known limit: articles carry the ticker used at the time, so a company that changed ticker loses its earlier news.
+
+### 16 Nov 2026 — Chart widget improved
+- Above the chart: change over the chosen period with its highest and lowest close. On the chart: the period's high and low, an "E" on each past earnings day, a dotted line at the current price, price and date labels on the axes when pointing.
+- Controls: 1W added to the periods; a volume on/off button (remembered); a button that opens the chart across the whole window (Esc closes); a key under the chart explaining the three bands and the earnings marks.
+- Checked in the simulation in light and dark, line and candles, all periods, and the full-window view.
+
+### 16 Nov 2026 — News sentiment: Alpaca probe written (waiting for keys)
+- News is still not in the model: the Benzinga plan gave about 2 articles a day market-wide, too thin to compare stocks. Alpaca's news API (Benzinga and other publishers) is the candidate replacement.
+- Alpaca has a historical endpoint and a live stream. Only the historical one is needed: it serves both the back history and "everything since yesterday". The live stream matters only for showing headlines the second they appear.
+- `python -m src.ingest.alpaca_news --probe` counts articles on one trading day per year (2015 on) and the last three days, and how many index members they cover. Needs `ALPACA_API_KEY` and `ALPACA_API_SECRET` in `.env` (blank entries added to `.env.example`). Nothing is saved. Decision after the probe: download and test news features against v1.0, or drop it.
+- Still to solve before any commercial use: the sentiment scorer (FinBERT) is non-commercial, and Alpaca's terms for redistributing news text must be read.
+
+### 16 Nov 2026 — ✅ Daily model trained on Kaggle (`models/latticeiq_v1.npz`)
+- `python -m scripts.kaggle_cloud final-model` finished in 6 minutes: **722 stocks, 2.7 million rows, 44 features, prices from 3 Jan 2000 to 5 Nov 2026**. The saved copy matches the trained network to 1e-8. File checked after download: three horizons, three networks each, 44 → 64 → 32 → 1.
+
+| Horizon | Rows | Last date with a known outcome | Trust factor k | Rank skill since mid-2021 (model trained to mid-2021) |
+|---|---|---|---|---|
+| 5 days | 2,707,124 | 29 Oct 2026 | 0.37 | +0.009 |
+| 20 days | 2,698,770 | 8 Oct 2026 | 0.20 | +0.001 |
+| 60 days | 2,676,420 | 12 Aug 2026 | 0.17 | +0.003 |
+
+- **How to read it.** k only scales the forecast size (the expected return shown is 17–37% of the raw output); it does not change the order of stocks. The last column is a check made during training: a copy trained to about mid-2021 and never retrained is scored on mid-2021 to late 2026. It is a harder test than the walk-forward runs (which retrain every year and averaged 0.015–0.020 over 2012–2024), but it says the same thing as the weak 2024 in those runs: **the edge has been thin in recent years, clearly positive only at 5 days.** The daily rank is a mild tilt, not a strong signal. This is the main argument for the improvement tests.
+- **Holdout note.** That check window includes 2025–26, with a model that had not seen those years. It is one blended number over five years, not the holdout test, and nothing will be chosen or tuned from it. Recorded here so the holdout claim stays exact.
+- **Fixes after the first real run:** the price update now notices that the saved prices lack the former index members the model ranks against and downloads them once (remembered in `data/live/tickers_asked.json`); the dashboard re-ranks after a retrain even if prices have not changed; failed downloads are retried once, not twice.
+- **Next start of the dashboard** downloads about 650 tickers once, ranks the 500 members with the new model and shows the ranks.
+
+### 16 Nov 2026 — ✅ "Train once, score daily" built (the ranking model can now run every day)
+- **What it is:** `python -m scripts.kaggle_cloud final-model` trains v1.0 once on all data (5, 20, 60 days) and copies `models/latticeiq_v1.npz` to the PC. From then on `python -m scripts.run_dashboard` ranks every stock with it after each close (about a minute, no PyTorch needed) and the page shows it: a "Rank against the market" panel on each stock, a "model rank" sort in the list, and highest / lowest ranked on the Overview. Retrain monthly or quarterly with the same command.
+- **Every forecast is logged** to `data/live/forecasts/<day>.csv` before its outcome is known. Scoring these against what happened (the live record) is the next step; it needs at least 5 trading days of logs.
+- **Checks done on the staged data (cloud workspace):** the saved numpy copy of the net matches PyTorch to 1e-9; research prices cut three weeks early and continued with a differently scaled daily file reproduce the scores exactly (difference 0.0); more price history changes nothing. Found: limiting filings to recent years changes fundamental features for some stocks, so scoring uses every filing (v1.1 item, see `decisions.md`).
+- **Not done here:** the real training run. The full panel needs about 8 GB of memory, more than the cloud workspace has, so it was tried only on a reduced set (2017 onward, every 5th day) to prove the chain end to end. The real model comes from the Kaggle command above.
+- **Known limits:** fundamentals are as of the last `python -m src.ingest.edgar` run (not refreshed daily yet); the daily model learns from 2025–26, the one-time holdout test will train its own model to 2024.
+- 42 tests pass (2 new: prices are joined without a jump and a split after the freeze is recorded; the saved model equals the trained one).
+
+### 16 Nov 2026 — Modern chart, ranges that follow the price, faster background updates
+- **Chart:** line with a soft fill by default (green or red by the period's direction), candles as an option (remembered); a floating label follows the pointer (price and day's change, today so far, or the likely range on a future day); dotted grid; the line's end pulses while the market is open. Bug fixed on the way: a new range arriving during the cone's opening animation could freeze the cone half-drawn and hide the earnings marker.
+- **Ranges follow the price:** while the market is open, the three ranges, the cone and the ladder are re-centred on the price now and sized for the time left to the same end date; the line under them shows the range as made at the close. See the decision in `decisions.md` (this replaces "fixed until the close").
+- **Background updates:** the stock on screen refreshes every 20 seconds (was 60), all stocks every 10 minutes (was 15). After the close the finished day is downloaded and every forecast rebuilt without anyone touching it. `start_dashboard.bat` starts it minimised with a double-click.
+- **Limits, stated on the page and in the README:** prices are Yahoo's and can be 15 minutes late; to-the-second quotes need a broker or paid feed. The live range is the tested range re-centred, not a separately tested model.
+- **Model: what "updates itself" means today and what is next.** The range model already rebuilds from each finished day. The ranking model (v1.0) is not yet scored daily. Plan, in order: (1) daily scoring job: train once on all data, save the weights, score every stock after each close and show the rank on the page; (2) keep a live record of every forecast against what happened; (3) test, one at a time against v1.0 on the same years: 8-K event features, sector-neutral target, finance-pretrained Chronos, and (once a few months are saved) analyst target and rating changes; (4) ranges: adaptive calibration so the hit rate self-corrects after turbulent weeks.
+
+### 16 Nov 2026 — "What analysts expect in 12 months" card (TradingView-style price targets)
+- Request: a forecast view like TradingView's price-target page (past year of prices, then a fan to the high / average / low 12-month target, plus analyst ratings).
+- Added to every stock page: that picture, the average / highest / lowest / median target with the change from today's price, the buy / hold / sell counts, and how often the last four earnings beat the estimates. LatticeIQ's own 60-day range is drawn on the same picture as a thick blue bar, so the two can be compared by eye.
+- Source: Yahoo Finance, one stock at a time when it is opened, kept for a day (`src/ingest/analysts.py`, `/api/analysts` in `scripts/run_dashboard.py`). Check from the terminal: `python -m src.ingest.analysts NVDA`.
+- **Stated on the page:** these are analysts' opinions, not LatticeIQ forecasts, and they have not been tested here. Each day's numbers are saved to a history per stock, because Yahoo only gives today's consensus; after a few months this can be tested as a model input (target versus price, rating changes).
+- Not tested against the real Yahoo service from the cloud workspace; tested with stand-in data. 40 tests pass (1 new: fields are read defensively, a failed fetch falls back to the saved copy).
+
+### 16 Nov 2026 — Logos and look brought closer to the big finance sites
+- Request: logos were small, low quality and inside a white box; make the page look like Coinbase, Kalshi and Crypto.com.
+- Logos: the white box and padding were ours and are gone. Every logo is now one rounded square; solid-square logos fill it edge to edge, see-through ones sit on a light tile. Coverage went from 297 to 492 of 500 stocks: every company address in `app/logos.js` was checked against the logo service from the PC's browser (many big companies are filed under addresses such as `corporate.walmart.com`). No logo found for AZO, CF, COF, EVRG, OKE, TTWO, ZTS, VMRK: letter tiles.
+- Limits checked: the free service serves 128-pixel squares only, and its terms forbid bulk download and editing, so logos are not copied into the project or recoloured. Logos with their own white background show as a white square in dark mode. A free logo.dev key in `app/config.js` gives double-resolution, see-through logos in light and dark versions for all stocks.
+- Look: company name first with the ticker as a small tag and the price large underneath; pill-shaped navigation, search, look-ahead, chart-period and list-filter controls; rounder cards and softer lines; cooler, lighter background.
+- Bug found while checking on the PC: after opening a stock from another page, the candles could be squeezed into a corner with the cone cut off. The chart library was told the date range before it had noticed the chart's new size. The page now sizes the chart itself before setting the range.
+- Company names are tidied for display (`tidy_name` in `scripts/export_dashboard.py`): "Cdw Corp" → "CDW", "Mckesson Corp" → "McKesson", "Bank Of America Corp /De/" → "Bank of America".
+
+### 16 Nov 2026 — Layout fixed for laptop screens
+- Reported: the page was not showing correctly. Opened the running dashboard on the PC and checked it at laptop sizes (1280×600, 1536×730). Found: the price ranges in the three forecast cards spilled out of their cards, the footer wrapped to two lines and took screen height, and the page was split into three small panes that each scrolled on their own, so the chart was mostly hidden.
+- Fix: the page now scrolls as one page (the top bar, the stock list and the right-hand panel stay in place); the forecast cards size their text to the space and wrap between the two prices; the chart height follows the window so the whole chart fits on screen; thinner scrollbars; narrower side columns below 1480 px. Also: a pasted or edited address such as `#NVDA/20` now opens that stock.
+- Checked at 1280×600, 1536×730, 1440×900, 900 and 390 px wide, light and dark.
+
+### 16 Nov 2026 — Today's prices shown next to the forecasts
+- Request: the page should show today's prices (16 Nov), not only the last close, together with the forecasts.
+- While the dashboard runs and the US market is open, it now fetches today's prices so far: all stocks, the market strip and the Overview every 15 minutes; the stock on screen every minute, with today's candle on the chart. The big price becomes today's price with the last close under it. Before the open, the page says when the market opens in local time (7:30 pm in Pakistan) and shows the last close, since nothing newer exists.
+- **Decision:** forecasts stay anchored to the last finished close and do not move during the day. That is how they were tested (close to close); re-anchoring on a half-finished day would make them a little too narrow. The page states whether today's price is inside, above or below the range. About 20 minutes after the close the dashboard downloads the finished day, rebuilds the forecasts and the page reloads itself.
+- Code: `live.quotes()` and `live.market_state()` in `src/ingest/live.py`; `/api/today`, `/api/quote` and a background thread in `scripts/run_dashboard.py`. 39 tests pass (2 new).
+- Not tested against the real Yahoo service from the cloud workspace (no access there); tested with a stand-in price source. First real run is on the PC.
+
+### 16 Nov 2026 — ⚠ Dashboard prices were out of date: daily update added
+- **Problem (reported from using the page):** prices looked wrong and the page seemed to show past prices, not future ones. Checked the data on the PC: the page said "11 Nov" but NVDA's price was its 6 Nov close and AAPL's its 5 Nov close, while the real last close was Fri 13 Nov. Cause: the research downloaders (`tiingo.py`, `yahoo.py`) fetch each ticker once and skip it afterwards, so `data/clean/prices.parquet` stops on whatever day each ticker was downloaded. Nothing updated it. The ranges were computed from those old prices, so they were off too. The range method itself was not the cause.
+- **Fix:** `src/ingest/live.py` downloads the latest closing prices (three years, current members + 15 market funds, Yahoo) into `data/live/prices.parquet`; an unfinished trading day is never included. `python -m scripts.run_dashboard` now runs this on every start when a newer closing day should exist, refreshes SEC filings once a day, and rebuilds the page data only when something changed. The research file stays frozen (data freeze "universe v2"); the range multipliers are still fitted on it and are saved, so a daily rebuild takes seconds.
+- **Page:** each stock now opens with "Where the price is likely to be": the range and end date for 5, 20 and 60 trading days. The big price is labelled as the close of a named day. A bar at the top warns when the prices are old or are saved ones. Candles now match public charts (adjusted for splits only).
+- Correction to the note below: `python -m src.ingest.yahoo` does not bring existing tickers up to date; it only downloads tickers with no file.
+- 37 tests pass (2 new: the update waits for the market to close; unfinished days, holes and missing tickers are handled, and a failed download keeps the file on disk).
+- **Still true:** these are end-of-day prices from Yahoo, for research use. Live quotes and a commercial launch need a licensed feed.
+
+### 16 Nov 2026 — Dashboard redesigned (Overview, search, logos, market strip)
+- Three pages now. **Overview** (opens first): how many stocks rose and fell, a two-week earnings calendar, biggest moves of the day, calmest and wildest stocks for the chosen look-ahead, and important SEC filings. **Stocks**: the list (now with company logo, 30-day sparkline, day change, range width), the chart with 1M / 3M / 6M / 1Y buttons and a readout that shows prices on candles and the range on any future day in the cone, key figures (day range, 12-month range, volume, distance from high), then the ranges, earnings and filings. **Track record**: unchanged content.
+- New: search by ticker or company name (press `/`), starred stocks (kept in the browser), "Earnings soon" filter, market strip of index and sector funds, up/down arrow keys to step through the list.
+- Logos: about 300 well-known companies load from `cdn.tickerlogos.com` with no key (attribution link in the footer); a free logo.dev key in `app/config.js` covers the rest; letter tiles otherwise. `useTickerLogos: false` turns them off.
+- Export fixes found while testing: (1) if a price download stopped half-way, stocks had different last days and "today's moves" mixed days. The export now shows every stock as of the latest day that 9 in 10 stocks have reached and prints a note. (2) A company that has already reported is shown as "Reported earnings on …" with the following report as next, instead of "expected". The range keeps its earnings width for those few days, exactly as it was tested.
+- The data format changed: rebuild once with `python -m scripts.run_dashboard --refresh`. 35 tests pass.
+
+### 15 Nov 2026 — Dashboard built (real candles, price cone, scheduled earnings, track record)
+- `python -m scripts.run_dashboard` opens a local page (`app/`): list of all ~500 current members with each stock's range drawn as a width on one shared scale; candlestick chart (TradingView Lightweight Charts, vendored) with the 50 / 80 / 90% cone for 5 / 20 / 60 trading days; amber marker and wider range when an earnings report is expected in the window; past earnings-day moves; recent SEC filings in plain words; light and dark themes; works on a phone.
+- Track-record page: every range replayed walk-forward on 2012–2024, said-vs-done table, year-by-year plot against the 80% aim, the ranking model's results, and what the site can and cannot tell you.
+- New range model behind it, `src/models/vol_ranges.py` (blended volatility + earnings-aware multipliers; multipliers fitted on windows ending by 31 Dec 2024, holdout not scored). Measured: 80% range held 79.5% / 79.0% / 79.1% at 5 / 20 / 60 days; width ±4.6% / ±9.5% / ±16.6%; earnings windows 77–79% (a one-size range: 57%).
+- `scripts/export_dashboard.py` builds `app/data/` (git-ignored: licensed prices). Company names from the SEC ticker list; logos optional via a free logo.dev key in `app/config.js` (letter tiles otherwise).
+- 35 tests pass (2 new: no look-ahead in the volatility, hit rates near target on synthetic data, earnings-window flag).
+- **Not connected yet:** the daily rank from the v1.0 model (needs the forecast job). Next: forecast job on Kaggle → rank panel; price-range baseline run on universe v2.
+
+### 15 Nov 2026 (price ranges: how narrow can they honestly be?)
+- Question from the product side: ranges must be narrow enough to act on, and still right. Answer in numbers: range width is set by the stock's volatility. Example from our data: NVDA at $186.64, 5-day 80% range ≈ ±7.0% ($174–$200); KO ±3.3%; TSLA ±8.4%. Nothing honest can be much narrower at the same confidence; the lever is a better volatility forecast and knowing when a big move is scheduled.
+- Quick checks on the staged price data (5 days, 80% level, walk-forward multipliers, 2012–2024):
+  - volatility input: 20-day close-to-close 9.64% average width → Garman-Klass 9.28% (−3.7%) → blend of four measures 9.13% (**−5.3%**, interval score −2.6%), same coverage (79%).
+  - earnings weeks (7% of stock-weeks): typical move is 1.7× larger; a one-size 80% range covers only **56.6%** there vs 80.6% elsewhere. Earnings-aware ranges: 76% coverage in earnings weeks with the true date (64% with a crude "same week as last year" estimate), other weeks 3–4% narrower.
+- Plan (in `docs/decisions.md` candidates): blended volatility features + earnings-in-window feature in `run_brackets`, adaptive conformal calibration, interval score and earnings-week coverage reported. Baseline = current ranges on universe v2 (run pending).
+
+### 15 Nov 2026 — ✅ FINAL v1.0 numbers on universe v2 (audited list)
+- Kaggle run v16 finished: **722 stocks** (cleaned list confirmed in the log), 2.71 M rows. Runs `20261114_0752_…h5`, `20261114_0809_…h20`, `20261114_0827_…h60`; summaries saved in `results/`.
+
+| 3-seed MLP (v1.0) | Rank IC (t) | Hit rate | Positive years | Old list (634) | Before audit drops (727) |
+|---|---|---|---|---|---|
+| 5 days | **0.0149 (3.07)** | 50.5% | 12 of 13 | 0.0136 (2.63) | 0.0141 (2.84) |
+| 20 days | **0.0197 (3.18)** | 50.7% | 10 of 13 | 0.0180 (2.66) | 0.0192 (2.95) |
+| 60 days | **0.0199 (2.23)** | 51.0% | 10 of 13 | 0.0229 (2.39) | 0.0202 (2.23) |
+
+- Ensemble v2 0.0141 / 0.0173 / 0.0123; XGBoost 0.0094 / 0.0067 / 0.0016. MLP best at all horizons. At 20 days the MLP now also beats Random Walk on forecast error (DM p 0.02).
+- **Top vs bottom groups (the number competitors advertise):** top 20% beat SPY 50.2% / 49.9% / 50.1%; bottom 20% 48.4% / 47.7% / 47.4%; top minus bottom +0.12% / +0.46% / +0.76% in 11 / 11 / 10 of 13 years. Same conclusion as before: the top group matches the market, the bottom group lags.
+- Validation vs test: 0.016 vs 0.015, 0.020 vs 0.020, 0.023 vs 0.020 → no sign of memorising.
+- Weak points: 2024 negative at 20 and 60 days; 2019 and 2021 about zero at 20 days.
+- **Noise floor learned:** five stocks fewer moved single years by up to 0.015 and the overall score by 0.0005–0.0008. Add-ons must beat v1.0 by clearly more than that.
+- README, results.md (section 0 + 0b), decisions.md, market-comparison.md and the by-year chart updated to these numbers.
+- **Next:** price ranges on universe v2 (`kaggle_cloud brackets`, 3 horizons) → crash risk + recovery → SEC 8-K event features → FinText → sector-neutral target.
 
 ### 14 Nov 2026 (market comparison + README brought up to date)
 - New `docs/market-comparison.md`: what competitors publish (Danelfin +14.69%/yr for top scores and +376% vs +166% backtest; Prospero.ai 54% win rate; AltIndex 70% win rate, all self-reported or backtested), what research reports (51.74% next-day direction for the best finance-pretrained model), where we stand, why the numbers are not comparable, a checklist for reading accuracy claims, and what LatticeIQ can and cannot claim. Sources listed.
@@ -457,15 +530,23 @@ Targets to beat: rank IC 0.03–0.08 with t > 2, hit rate 52–56%, DM p < 0.05 
 | 6 Nov | Weekly evaluation grid for all models | Same dates for every model; Kronos affordable |
 | 6 Nov | Rank features across stocks per date | Removes market-wide shifts; standard in quant |
 | 6 Nov | 2025-01-01 onward = locked holdout | Run once after model freeze |
-| 8 Nov | Holdout stays locked until end of FYP-2 | Strongest final evidence for credibility |
-| 8 Nov | News deferred to FYP-2 | Benzinga plan ≈ 2 articles/day market-wide; too sparse to rank 466 stocks |
+| 8 Nov | Holdout stays locked until the model is final | Strongest final evidence for credibility |
+| 8 Nov | News set aside | Benzinga plan ≈ 2 articles/day market-wide; too sparse to rank 466 stocks |
 | 8 Nov | Macro features dropped from return ranking, kept for brackets | Ablation: +macro IC 0.012 vs 0.013 price-only, noisier |
 | 6 Nov | One person does all roles; optional extras (Kronos fine-tuning, TimesFM LoRA, Chronos-2, FinBERT fine-tuning, AV sentiment check) dropped unless ahead of schedule | Design doc's 11–16 weeks assumed 3 people working in parallel |
+| 12 Nov | v1.0 = neural net averaged over 3 seeds (ensemble v2 kept as the secondary for the holdout) | Best at all three horizons, 6 of 6 comparisons on the full list |
+| 13 Nov | Research data frozen as "universe v2" after the audit | Every later result is measured on the same data |
+| 15 Nov | Volatility range model in the product | As well calibrated, simpler, and right in earnings weeks |
+| 16 Nov | Train once, score daily; daily prices kept apart from the research data | Fast daily runs without changing the data the results were measured on |
+| 16 Nov | News retried with Alpaca (Benzinga articles only) | 435–1,144 articles a day from 2015; keeping one publisher keeps counts comparable across years |
 
 ## Known issues
 - Tiingo FREE plan: 50 req/h, 1,000/day, 2 GB/month; possibly a monthly unique-ticker cap. Downloader resumes automatically. Free licence = personal use only.
-- Benzinga plan returns only a small sample of news (≈2/day market-wide) → news not used in FYP-1.
-- Only 47% of departed S&P members have Tiingo prices → survivorship bias in backtests until fixed or measured.
+- ~~Benzinga plan returns only ≈2 news articles a day~~ → news retried with Alpaca (16 Nov).
+- ~~Only 47% of departed S&P members have prices~~ → after the Yahoo fill-in and rebuild, 98% of true members in the test years (91% on average); 67% before 2012, so early training years still lean towards survivors.
+- The edge has been thin recently: 2024 negative at 20 and 60 days; the daily model's check on mid-2021 to late 2026 is near zero except at 5 days.
+- Market holidays are not known to the daily update; on a holiday it finds no new prices and waits.
+- Scoring uses all filings; limiting filings to 7 or 14 years changed some fundamental features (cause not traced).
 - Delisted stocks whose Tiingo symbol differs (e.g. LEH → LEHMQ) are counted as missing; manual mapping possible later.
 - ~~Price gaps stretched targets across holes~~ fixed 7 Nov (calendar alignment).
 - ~~Universe mixes ETFs with stocks~~ fixed 6 Nov. ~~XGBoost MSE worse than RW~~ fixed with shrinkage 6 Nov.

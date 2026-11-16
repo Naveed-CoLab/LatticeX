@@ -1,6 +1,6 @@
 # How LatticeIQ compares with the market
 
-What other AI stock tools and open research models say about their accuracy, how those numbers are measured, and where LatticeIQ stands. Checked on 14 Nov 2026; every figure has its source at the bottom.
+What other AI stock tools and open research models say about their accuracy, how those numbers are measured, and where LatticeIQ stands. Checked on 14 Nov 2026 (LatticeIQ figures updated 15 Nov 2026); every figure has its source at the bottom.
 
 **Short version:** nobody credible claims to call a stock's direction right 90% of the time. Commercial tools advertise backtested returns of their top picks or self-reported win rates. Published research reports direction accuracy of 51–52%. LatticeIQ's ranking edge is small and of the same kind, and it is measured more strictly than most marketing numbers.
 
@@ -26,19 +26,21 @@ One 2026 review of these tools concluded: "there is no peer-reviewed evidence we
 
 ## 3. Where LatticeIQ stands
 
-Measured walk-forward on the corrected S&P 500 list (727 stocks, test years 2012–2024, about 298,000 weekly forecasts, model retrained for every test year, 2025–26 never touched):
+Measured walk-forward on the audited S&P 500 list (722 stocks, test years 2012–2024, about 298,000 weekly forecasts, model retrained for every test year, 2025–26 never touched):
 
 | Measure | 5 days | 20 days | 60 days |
 |---|---|---|---|
-| Direction vs the market right | 50.4% | 50.6% | 51.0% |
-| Rank IC (t-statistic) | 0.0141 (2.84) | 0.0192 (2.95) | 0.0202 (2.23) |
-| Years with positive rank IC | 11 of 13 | 12 of 13 | 9 of 13 |
+| Direction vs the market right | 50.5% | 50.7% | 51.0% |
+| Rank IC (t-statistic) | 0.0149 (3.07) | 0.0197 (3.18) | 0.0199 (2.23) |
+| Years with positive rank IC | 12 of 13 | 10 of 13 | 10 of 13 |
+| Top 20% of the ranking beat the S&P 500 | 50.2% | 49.9% | 50.1% |
+| Bottom 20% of the ranking beat the S&P 500 | 48.4% | 47.7% | 47.4% |
 | 80% price range contains the real price* | 79.8% | 80.3% | 80.2% |
 | 90% price range contains the real price* | 90.0% | 90.4% | 90.8% |
 
-\* Price ranges and the group figures below were measured on the earlier 634-stock list; the re-run on the corrected list is pending.
+\* Price ranges were measured on the earlier 634-stock list; the re-run on the audited list is pending.
 
-**Measured the way competitors advertise** (how the top-ranked group did against the index, 20 days*): our top 20% beat the S&P 500 49.9% of the time, the bottom 20% only 48.0%. The top group roughly matches the market; the bottom group lags it. So today LatticeIQ is better at flagging likely laggards than at picking winners. Closing that gap is the main accuracy goal, and this number is reported for every model change.
+**Measured the way competitors advertise** (how the top-ranked group did against the index): our top 20% beat the S&P 500 about half the time, the bottom 20% clearly less often. The top group matches the market; the bottom group lags it by 0.46% per 20 days relative to the top, in 11 of 13 years. So today LatticeIQ is better at flagging likely laggards than at picking winners. Closing that gap is the main accuracy goal, and this number is reported for every model change.
 
 ### Why the numbers are not directly comparable
 
@@ -67,7 +69,7 @@ Measured walk-forward on the corrected S&P 500 list (727 stocks, test years 2012
 |---|---|
 | "Our ranking has a small, statistically significant edge that held in most of 13 test years" | **Yes** (t-statistic above 2 at all three horizons) |
 | "Our 90% price range contains the real price about 90% of the time" | **Yes** (earlier list; being re-measured) |
-| "Low-ranked stocks tend to lag the market" | **Yes** (earlier list; being re-measured) |
+| "Low-ranked stocks tend to lag the market" | **Yes** (bottom 20% beat the index 47.7% of the time at 20 days) |
 | "Our top picks beat the market" | **No, not yet** |
 | "We predict whether a stock will go up" | **No**: tested and rejected |
 | "X% accurate predictions" | **No**: not a meaningful or provable claim |
@@ -93,4 +95,4 @@ A US launch also needs a legal review of every performance statement before it i
 - Walnut, "The Most Accurate AI Stock Predictor?" (Nov 2026): https://walnutinvest.com/resources/most-accurate-ai-stock-predictor
 - Rahimikia, Ni & Wang, "Re(Visiting) Time Series Foundation Models in Finance" (2025): https://arxiv.org/abs/2511.18578
 - Microsoft Qlib benchmarks: https://github.com/microsoft/qlib/tree/main/examples/benchmarks
-- LatticeIQ runs: `results/20261113_1855_…h5`, `20261113_1914_…h20`, `20261113_1932_…h60`; earlier-list runs in [`results.md`](results.md)
+- LatticeIQ runs: `results/20261114_0752_…h5`, `20261114_0809_…h20`, `20261114_0827_…h60`; all tables in [`results.md`](results.md)

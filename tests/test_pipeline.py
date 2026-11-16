@@ -538,3 +538,292 @@ def test_universe_audit_counts_members_with_prices():
                        "end": pd.to_datetime([None] * 4)})
     rv = relative_volume(uv, pv).set_index("ticker")["rel_volume"]
     assert rv["TINY"] < 0.05 and rv[["AAA", "BBB", "CCC"]].min() > 0.3
+
+
+def _range_world(n_stocks=40, days=1500, seed=3, earn_boost=2.2):
+    """Random-walk stocks with their own volatility; every 65th trading day (13 weeks, so the same date
+    each year) is an 'earnings day' with a bigger move."""
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2010-01-04", periods=days)
+    rows, ev = [], []
+    for k in range(n_stocks):
+        vol = rng.uniform(0.008, 0.03)
+        r = rng.normal(0, vol, days)
+        earn = np.arange(40 + k % 20, days, 65)
+        r[earn] *= earn_boost * 2
+        c = 50 * np.exp(np.cumsum(r))
+        o = np.r_[50, c[:-1]] * np.exp(rng.normal(0, vol / 4, days))
+        rows.append(pd.DataFrame({"ticker": f"S{k:02d}", "date": dates, "open": o, "close": c, "adj_close": c,
+                                  "high": np.maximum(o, c) * np.exp(np.abs(rng.normal(0, vol / 3, days))),
+                                  "low": np.minimum(o, c) * np.exp(-np.abs(rng.normal(0, vol / 3, days)))}))
+        ev.append(pd.DataFrame({"ticker": f"S{k:02d}", "filed": dates[earn], "ev_earnings": True}))
+    px = pd.concat(rows, ignore_index=True)
+    u = pd.DataFrame({"ticker": px["ticker"].unique(), "start": pd.Timestamp("2000-01-01"), "end": pd.NaT})
+    return px, u, pd.concat(ev, ignore_index=True)
+
+
+def test_vol_ranges_use_only_the_past_and_hold_as_often_as_they_say():
+    from src.models import vol_ranges as vr
+    px, u, ev = _range_world()
+    px["vol"] = vr.daily_vol(px)
+    # no look-ahead: changing prices after a date must not change the volatility known on that date
+    cut = px["date"] <= "2012-06-29"
+    px2 = px.copy()
+    px2.loc[~cut, ["open", "high", "low", "close", "adj_close"]] *= 3.0
+    assert np.allclose(vr.daily_vol(px2)[cut].dropna(), px.loc[cut, "vol"].dropna())
+    # walk-forward hit rates land near what the range claims
+    est = vr.expected_earnings(ev)
+    m = vr.panel(px, u, est, 5)
+    tr = vr.track_record(m, 5, first_year=2013, last_year=2015)
+    for lv in ("50", "80", "90"):
+        assert abs(tr["levels"][lv]["hit_rate"] - int(lv) / 100) < 0.04, (lv, tr["levels"][lv])
+    # earnings windows get a wider range, and it still holds there
+    e80 = tr["levels"]["80"]
+    assert e80["avg_width_earnings"] > 1.1 * e80["avg_width_other"]
+    assert e80["hit_rate_earnings"] > 0.72
+    # today's ranges nest: 50% inside 80% inside 90%, all around the price
+    q = vr.fit_multipliers(m)
+    r = vr.ranges_today(100.0, 0.02, 5, q, earn=False)["bands"]
+    assert r["90"][0] < r["80"][0] < r["50"][0] < 100 < r["50"][1] < r["80"][1] < r["90"][1]
+    assert vr.ranges_today(100.0, 0.02, 5, q, earn=True)["bands"]["80"][1] > r["80"][1]
+
+
+def test_expected_earnings_window_flag():
+    from src.models import vol_ranges as vr
+    ev = pd.DataFrame({"ticker": ["AAA", "AAA", "BBB"], "filed": pd.to_datetime(["2023-02-01", "2023-05-03", "2023-03-15"]),
+                       "ev_earnings": [True, True, False]})
+    est = vr.expected_earnings(ev)
+    assert list(est) == ["AAA"]                                     # BBB's filing was not an earnings report
+    nxt = vr.next_expected("AAA", "2024-01-20", est)
+    assert nxt == pd.Timestamp("2024-01-31")                        # last year's 1 Feb, same weekday a year later
+    flags = vr.earnings_in_window(["AAA", "AAA", "BBB"], pd.to_datetime(["2024-01-22", "2024-02-12", "2024-01-22"]),
+                                  pd.to_datetime(["2024-01-29", "2024-02-19", "2024-01-29"]), est)
+    assert flags.tolist() == [True, False, False]                   # within 3 days of the window end; too early; no calendar
+
+
+def test_last_close_day_waits_for_the_market_to_close():
+    """The daily update must never treat an unfinished trading day as a closing price."""
+    from src.ingest import live
+    ny = lambda s: pd.Timestamp(s, tz="America/New_York")
+    assert live.last_close_day(ny("2026-11-16 10:00")) == pd.Timestamp("2026-11-13")   # Monday morning -> Friday
+    assert live.last_close_day(ny("2026-11-16 16:05")) == pd.Timestamp("2026-11-13")   # closed, prices not final yet
+    assert live.last_close_day(ny("2026-11-16 16:30")) == pd.Timestamp("2026-11-16")   # Monday evening -> Monday
+    assert live.last_close_day(ny("2026-11-15 12:00")) == pd.Timestamp("2026-11-13")   # Sunday -> Friday
+    # the same moment given in another time zone gives the same answer (Karachi is 10 hours ahead in November)
+    assert live.last_close_day(pd.Timestamp("2026-11-17 03:00", tz="Asia/Karachi")) == pd.Timestamp("2026-11-16")
+
+
+def test_live_update_keeps_finished_days_only_and_survives_missing_tickers(tmp_path, monkeypatch):
+    from src.ingest import live
+    last = live.last_close_day()
+    days = pd.bdate_range(end=last + pd.to_timedelta(1, unit="D"), periods=30)   # includes a day after the last close
+    days = days[days <= last + pd.to_timedelta(1, unit="D")]
+
+    def fake(ticker, start):
+        if ticker == "GONE":
+            return pd.DataFrame()
+        if ticker == "BOOM":
+            raise ConnectionError("Yahoo did not answer")
+        n = len(days)
+        h = pd.DataFrame({"Open": np.linspace(100, 110, n), "High": np.linspace(101, 111, n), "Low": np.linspace(99, 109, n),
+                          "Close": np.linspace(100.5, 110.5, n), "Adj Close": np.linspace(98, 110.5, n),
+                          "Volume": np.full(n, 1e6)}, index=days.tz_localize("America/New_York"))
+        h.iloc[3, h.columns.get_loc("Close")] = np.nan                              # a hole Yahoo sometimes leaves
+        return h
+
+    px, failed = live.download(["AAA", "BBB", "GONE", "BOOM"], last, fetch=fake, pause=0.001)
+    assert sorted(failed) == ["BOOM", "GONE"]
+    assert list(px.columns) == live.COLS and set(px["ticker"]) == {"AAA", "BBB"}
+    assert px["date"].max() <= last                                    # the unfinished day was dropped
+    assert px["close"].notna().all() and len(px[px["ticker"] == "AAA"]) == (days <= last).sum() - 1
+
+    monkeypatch.setattr(live, "LIVE", tmp_path)
+    monkeypatch.setattr(live, "FILE", tmp_path / "prices.parquet")
+    monkeypatch.setattr(live, "wanted_all", lambda: ["AAA", "BBB", "CCC"])
+    assert live.update(fetch=fake) is True
+    assert live.status()["tickers"] == 3 and live.status()["day"] == px["date"].max()
+    assert live.update(fetch=fake) is False                            # already current: nothing downloaded again
+    # if most tickers fail (no internet), the file on disk is kept as it is
+    monkeypatch.setattr(live, "wanted_all", lambda: ["BOOM", "GONE", "AAA"])
+    before = (tmp_path / "prices.parquet").stat().st_mtime_ns
+    assert live.update(force=True, fetch=fake) is False
+    assert (tmp_path / "prices.parquet").stat().st_mtime_ns == before
+
+
+def test_todays_prices_are_only_the_day_after_the_last_close():
+    """quotes() must report a bar only if it is newer than the last finished day, with the right previous close."""
+    from src.ingest import live
+    last = live.last_close_day()
+    done = pd.bdate_range(end=last, periods=5)
+    today = last + pd.to_timedelta(3 if last.dayofweek == 4 else 1, unit="D")
+
+    def frame(days, closes):
+        return pd.DataFrame({"Open": closes, "High": [c + 1 for c in closes], "Low": [c - 1 for c in closes], "Close": closes,
+                             "Adj Close": closes, "Volume": [1e6] * len(closes)}, index=pd.DatetimeIndex(days).tz_localize("America/New_York"))
+
+    def fake(ticker, start):
+        if ticker == "OPEN":                                   # has traded today
+            return frame(list(done) + [today], [100, 101, 102, 103, 104, 106.5])
+        if ticker == "SHUT":                                   # nothing yet today
+            return frame(done, [50, 51, 52, 53, 54])
+        raise ConnectionError("no answer")
+
+    q = live.quotes(["OPEN", "SHUT", "BOOM"], fetch=fake, pause=0.001)
+    assert list(q) == ["OPEN"]
+    assert q["OPEN"]["date"] == f"{today:%Y-%m-%d}" and q["OPEN"]["last"] == 106.5 and q["OPEN"]["prev"] == 104
+
+
+def test_market_hours():
+    from src.ingest import live
+    ny = lambda s: pd.Timestamp(s, tz="America/New_York")
+    assert live.market_state(ny("2026-11-16 09:29"))["open"] is False
+    assert live.market_state(ny("2026-11-16 09:30"))["open"] is True
+    assert live.market_state(ny("2026-11-16 16:00"))["open"] is False
+    # before the open on a Monday it opens the same day; on Friday evening and at the weekend, on Monday
+    assert live.market_state(ny("2026-11-16 05:00"))["next_open"] == "2026-11-16T14:30:00Z"
+    assert live.market_state(ny("2026-11-13 18:00"))["next_open"] == "2026-11-16T14:30:00Z"
+    assert live.market_state(ny("2026-11-15 12:00"))["next_open"] == "2026-11-16T14:30:00Z"
+
+
+def test_analyst_view_is_read_defensively_and_kept_for_a_day(tmp_path, monkeypatch):
+    """Yahoo's analyst fields differ between library versions and stocks: every part is optional, a failed
+    fetch falls back to the saved copy, and each day's numbers are added to a history for later study."""
+    from src.ingest import analysts
+
+    class New:                                             # newer yfinance: dedicated price-target field
+        analyst_price_targets = {"current": 100.0, "low": 80.0, "mean": 120.0, "median": 118.0, "high": 150.0}
+        recommendations_summary = pd.DataFrame({"period": ["-1m", "0m"], "strongBuy": [1, 5], "buy": [2, 10], "hold": [3, 4],
+                                                "sell": [0, 1], "strongSell": [0, 0]})
+        earnings_history = pd.DataFrame({"epsActual": [1.0, 1.2, float("nan")], "epsEstimate": [0.9, 1.3, 1.1]},
+                                        index=pd.to_datetime(["2026-03-31", "2026-06-30", "2026-09-30"]))
+
+    got = analysts.parse(New())
+    assert got["target"] == {"low": 80.0, "mean": 120.0, "median": 118.0, "high": 150.0, "analysts": None}
+    assert got["ratings"] == {"strongBuy": 5, "buy": 10, "hold": 4, "sell": 1, "strongSell": 0}      # the current month's row
+    assert got["eps"] == [{"quarter": "2026-03-31", "actual": 1.0, "estimate": 0.9}, {"quarter": "2026-06-30", "actual": 1.2, "estimate": 1.3}]
+
+    class Old:                                             # older yfinance: only the company summary has targets
+        info = {"targetLowPrice": 8, "targetMeanPrice": 12, "targetHighPrice": 15, "numberOfAnalystOpinions": 7}
+
+        @property
+        def analyst_price_targets(self):
+            raise AttributeError("not in this version")
+
+    got = analysts.parse(Old())
+    assert got["target"]["mean"] == 12.0 and got["target"]["analysts"] == 7 and got["ratings"] is None and got["eps"] == []
+    assert analysts.parse(object()) == {"target": None, "ratings": None, "eps": []}                   # nothing at all
+
+    monkeypatch.setattr(analysts, "DIR", tmp_path)
+    calls = []
+
+    def fetcher(t):
+        calls.append(t)
+        if len(calls) == 3:
+            raise ConnectionError("no internet")
+        return analysts.parse(New())
+
+    day = 86400
+    first = analysts.get("AAA", fetcher, now=10 * day)
+    assert first["target"]["mean"] == 120.0 and len(first["history"]) == 1
+    assert analysts.get("AAA", fetcher, now=10 * day + 3600) == first and calls == ["AAA"]            # same day: saved copy
+    assert len(analysts.get("AAA", fetcher, now=11 * day + 60)["history"]) == 2                       # next day: fetched again
+    assert analysts.get("AAA", fetcher, now=12 * day + 120)["date"] == "1970-01-12"                   # failed: yesterday's copy
+    assert "error" in analysts.get("BBB", lambda t: {"target": None, "ratings": None, "eps": []}, now=10 * day)
+
+
+def test_daily_prices_are_joined_to_the_research_history_without_a_jump():
+    """Scoring continues each stock's research prices with the daily closing prices. The two sources use
+    different adjustment scales, so a careless join would create a fake one-day return."""
+    from src.models.production import splice
+    d = pd.bdate_range("2026-01-05", periods=8)
+    frozen = pd.concat([
+        pd.DataFrame({"date": d[:5], "ticker": "AAA", "close": [100, 101, 102, 103, 104.0], "adj_close": [50, 50.5, 51, 51.5, 52.0],
+                      "volume": 1e6, "split_factor": 1.0}),
+        pd.DataFrame({"date": d[:5], "ticker": "SPL", "close": [400, 404, 408, 412, 416.0], "adj_close": [400, 404, 408, 412, 416.0],
+                      "volume": 1e6, "split_factor": 1.0}),
+        pd.DataFrame({"date": d[:3], "ticker": "OLD", "close": 10.0, "adj_close": 10.0, "volume": 1e6, "split_factor": 1.0})])
+    live = pd.concat([
+        # same stock, live adjusted prices on another scale (x1.5), three new days: +1% a day
+        pd.DataFrame({"date": d[2:], "ticker": "AAA", "close": [102, 103, 104, 105.04, 106.0904, 107.151304],
+                      "adj_close": np.array([51, 51.5, 52, 52.52, 53.0452, 53.575652]) * 1.5, "volume": 2e6}),
+        # a 4-for-1 split after the research data was frozen: live closes are a quarter of the research ones
+        pd.DataFrame({"date": d[3:], "ticker": "SPL", "close": [103, 104, 105, 106, 107.0], "adj_close": [103, 104, 105, 106, 107.0], "volume": 4e6}),
+        # a stock the research data has never seen
+        pd.DataFrame({"date": d[5:], "ticker": "NEW", "close": [20, 21, 22.0], "adj_close": [20, 21, 22.0], "volume": 3e6})])
+    out = splice(frozen, live).sort_values(["ticker", "date"])
+    a = out[out["ticker"] == "AAA"]
+    assert len(a) == 8 and not a["date"].duplicated().any()
+    r = np.log(a["adj_close"]).diff().dropna()
+    assert np.allclose(r.iloc[-3:], np.log(1.01), atol=1e-9)                 # the new days carry the live returns
+    assert abs(r.iloc[3] - np.log(52 / 51.5)) < 1e-9                         # and there is no jump at the join
+    assert a["close"].iloc[-1] == 107.151304 and (a["split_factor"] == 1).all()
+    sp = out[out["ticker"] == "SPL"]
+    assert sp["split_factor"].iloc[5] == 4.0 and (sp["split_factor"].drop(sp.index[5]) == 1).all()   # split recorded once
+    assert abs(np.log(sp["adj_close"]).diff().iloc[5] - np.log(105 / 104)) < 1e-9
+    assert len(out[out["ticker"] == "OLD"]) == 3 and len(out[out["ticker"] == "NEW"]) == 3
+    assert splice(frozen, None).equals(frozen[["date", "ticker", "close", "adj_close", "volume", "split_factor"]])
+
+
+def test_saved_model_gives_the_same_forecasts_as_the_trained_one(tmp_path):
+    """Daily scoring runs the neural net in plain numpy from a saved file; it must match PyTorch."""
+    pytest.importorskip("torch")
+    from src.models.ensemble import MLPSeeds
+    from src.models import production as P
+    rng = np.random.default_rng(0)
+    X = pd.DataFrame(rng.uniform(-0.5, 0.5, (3000, 6)), columns=list("abcdef"))
+    X.iloc[::7, 2] = np.nan                                                   # missing inputs count as 0, as in training
+    y = 0.02 * X["a"].fillna(0) - 0.01 * X["d"] + rng.normal(0, 0.02, len(X))
+    model = MLPSeeds(epochs=2).fit(X, y, dates=np.repeat(np.arange(100), 30))
+    file = tmp_path / "m.npz"
+    P.save({20: P.export_mlp(model)}, {"name": "t", "features": list(X.columns)}, file)
+    meta, nets = P.load(file)
+    assert meta["features"] == list("abcdef") and list(nets) == [20] and len(nets[20]) == 3
+    assert np.allclose(P.forward(nets[20], X.values), model.predict(X), atol=1e-6)
+    assert P.load(tmp_path / "missing.npz") == (None, None)
+
+
+def test_alpaca_news_download_keeps_our_stocks_and_benzinga_only(tmp_path, monkeypatch):
+    """Months are saved one by one and skipped on a second run; the merged file has the columns the news
+    features read, tickers in our spelling, no article about other stocks and no late-arriving publisher."""
+    from src.features.news import news_features
+    from src.ingest import alpaca_news as A
+    (tmp_path / "raw").mkdir()
+    (tmp_path / "clean").mkdir()
+    monkeypatch.setattr(A, "path", lambda k: tmp_path / k)
+    pd.DataFrame({"id": [1], "created_utc": pd.to_datetime(["2020-01-02"], utc=True), "title": ["old"], "teaser": [""],
+                  "tickers": ["AAPL"], "channels": [""], "url": [""]}).to_parquet(tmp_path / "clean" / "news_articles.parquet")
+    calls = []
+
+    def fake(params):
+        calls.append(params)
+        page = int(params.get("page_token", 0))
+        day = pd.Timestamp(params["start"][:10]) + pd.to_timedelta(page, unit="D")
+        asked = set(params["symbols"].split(","))                 # the service returns only articles naming these
+        news = [{"id": int(f"{day:%y%m%d}") * 100 + i, "headline": f"<b>Apple</b> beats &amp; raises {i}", "summary": "Strong  quarter",
+                 "created_at": f"{day:%Y-%m-%d}T1{i % 9}:30:00Z", "symbols": [["AAPL"], ["MSFT", "BRK.B"], ["ZZZZ"], []][i % 4],
+                 "source": ["benzinga", "", "fiscal.ai"][i % 3], "url": None} for i in range(12)]
+        news = [n for n in news if set(n["symbols"]) & asked]
+        return {"news": news, "next_page_token": str(page + 1) if page < 2 else None}
+
+    monkeypatch.setattr(A, "_get", fake)
+    A.download("2024-03", "2024-04")
+    assert sorted(f.name for f in (tmp_path / "raw" / "news_alpaca").glob("*.parquet")) == ["2024-03.parquet", "2024-04.parquet"]
+    first = len(calls)
+    assert first >= 6 and all("BRK.B" in c["symbols"] or "AAPL" in c["symbols"] or "MSFT" in c["symbols"] or c["symbols"] for c in calls)
+    assert any("BRK.B" in c["symbols"].split(",") for c in calls)   # asked in Alpaca's spelling
+    A.download("2024-03", "2024-04")
+    assert len(calls) == first                                     # finished months are not asked for again
+
+    k = A.combine()
+    assert (tmp_path / "clean" / "news_articles_benzinga_plan.parquet").exists()      # the earlier file is kept once
+    saved = pd.read_parquet(tmp_path / "clean" / "news_articles.parquet")
+    assert list(saved.columns) == ["id", "created_utc", "title", "teaser", "tickers", "channels", "url", "source"]
+    assert set(saved["source"]) == {"benzinga", ""} and saved["id"].is_unique and len(saved) == len(k)
+    assert set(",".join(saved["tickers"]).split(",")) == {"AAPL", "MSFT", "BRK-B"}
+    assert saved["title"].iloc[0].startswith("Apple beats & raises") and saved["teaser"].iloc[0] == "Strong quarter"
+    assert str(saved["created_utc"].dt.tz) == "UTC"
+
+    scores = pd.DataFrame({"id": saved["id"], "score": 0.5})
+    nf = news_features(saved, scores, pd.bdate_range("2024-02-01", "2024-05-10"), ["AAPL", "MSFT", "BRK-B"], False)
+    assert nf["news_sent_5d"].max() == pytest.approx(0.5) and nf["news_cnt_5d"].max() > 0
+

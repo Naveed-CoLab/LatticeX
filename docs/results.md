@@ -2,44 +2,78 @@
 
 All results are walk-forward backtests on S&P 500 stocks, test years 2012–2024, scored weekly (~650 dates). The 2025–26 holdout has not been touched. Raw files: [`../results/`](../results/).
 
-> **Which stock list each table uses.** Section 0 is measured on the **corrected S&P 500 list** (727 stocks, 13 Nov 2026). Every later section was measured earlier, on a list whose membership was frozen at January 2019 (bug in `build_universe.py`, see [`decisions.md`](decisions.md)); those tables are kept as the record of how the model was chosen. Price ranges and rank-group figures are being re-run on the corrected list.
+> **Which stock list each table uses.** Section 0 is measured on the **audited S&P 500 list, "universe v2"** (722 stocks, 14 Nov 2026). Every later section was measured earlier, on a list whose membership was frozen at January 2019 (bug in `build_universe.py`, see [`decisions.md`](decisions.md)); those tables are kept as the record of how the model was chosen. Price ranges are being re-run on universe v2.
 
-## 0. v1.0 on the corrected stock list (13 Nov 2026)
+## 0. v1.0 on universe v2 (14 Nov 2026) — final
 
-727 stocks, 2.72 million stock-days, 44 features (price and volume 17, fundamentals 15, sector 12), about 298,000 weekly test forecasts. Runs `20261113_1855_…h5`, `20261113_1914_…h20`, `20261113_1932_…h60`. These runs were made before six wrong-company price histories were removed (one of them, LSI, inside test years 2012–14); the final "universe v2" run replaces them.
+722 stocks, 2.71 million stock-days, 44 features (price and volume 17, fundamentals 15, sector 12), about 298,000 weekly test forecasts. Runs `20261114_0752_…h5`, `20261114_0809_…h20`, `20261114_0827_…h60`.
 
 | Model | 5 days | 20 days | 60 days |
 |---|---|---|---|
-| **Neural net, 3 seeds (v1.0)**: rank IC (t) | **0.0141 (2.84)** | **0.0192 (2.95)** | **0.0202 (2.23)** |
-| v1.0 hit rate | 50.4% | 50.6% | 51.0% |
-| v1.0 positive years | 11 of 13 | 12 of 13 | 9 of 13 |
-| Ensemble v2 (XGBoost + neural net): rank IC (t) | 0.0137 (2.48) | 0.0175 (2.30) | 0.0130 (1.26) |
-| XGBoost alone: rank IC (t) | 0.0092 (1.61) | 0.0086 (1.11) | 0.0033 (0.31) |
+| **Neural net, 3 seeds (v1.0)**: rank IC (t) | **0.0149 (3.07)** | **0.0197 (3.18)** | **0.0199 (2.23)** |
+| v1.0 hit rate | 50.5% | 50.7% | 51.0% |
+| v1.0 positive years | 12 of 13 | 10 of 13 | 10 of 13 |
+| v1.0 vs Random Walk on forecast error (Diebold-Mariano p) | 0.47 | **0.02** | 0.41 |
+| Ensemble v2 (XGBoost + neural net): rank IC (t) | 0.0141 (2.60) | 0.0173 (2.34) | 0.0123 (1.26) |
+| XGBoost alone: rank IC (t) | 0.0094 (1.67) | 0.0067 (0.86) | 0.0016 (0.15) |
 
-Old list vs corrected list, v1.0 rank IC: 0.0136 → 0.0141 (5 days), 0.0180 → 0.0192 (20 days), 0.0229 → 0.0202 (60 days).
+The same model on three versions of the stock list (v1.0 rank IC, t in brackets):
 
-v1.0 rank IC by test year:
+| Stock list | 5 days | 20 days | 60 days |
+|---|---|---|---|
+| Frozen at Jan 2019 (634 stocks, the bug) | 0.0136 (2.63) | 0.0180 (2.66) | 0.0229 (2.39) |
+| Corrected, before the audit drops (727 stocks) | 0.0141 (2.84) | 0.0192 (2.95) | 0.0202 (2.23) |
+| **Universe v2, audited (722 stocks)** | **0.0149 (3.07)** | **0.0197 (3.18)** | **0.0199 (2.23)** |
+
+v1.0 rank IC by test year (universe v2):
 
 | Year | 2012 | 2013 | 2014 | 2015 | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 5 days | 0.006 | 0.026 | 0.041 | 0.011 | 0.007 | 0.016 | 0.013 | 0.006 | 0.029 | 0.000 | 0.028 | −0.007 | 0.006 |
-| 20 days | 0.034 | 0.010 | 0.058 | 0.005 | 0.032 | 0.026 | 0.014 | 0.003 | 0.025 | 0.005 | 0.031 | 0.014 | −0.009 |
-| 60 days | 0.012 | −0.026 | 0.061 | −0.003 | 0.088 | −0.008 | 0.039 | 0.018 | 0.014 | 0.008 | 0.047 | 0.036 | −0.039 |
+| 5 days | 0.012 | 0.019 | 0.042 | 0.005 | 0.008 | 0.019 | 0.011 | 0.013 | 0.032 | −0.001 | 0.029 | 0.001 | 0.003 |
+| 20 days | 0.037 | 0.005 | 0.055 | 0.010 | 0.047 | 0.034 | 0.019 | −0.003 | 0.017 | −0.001 | 0.021 | 0.026 | −0.014 |
+| 60 days | 0.006 | −0.030 | 0.066 | 0.003 | 0.083 | −0.005 | 0.030 | 0.008 | 0.023 | 0.024 | 0.037 | 0.030 | −0.029 |
 
-Validation score inside training vs test score (v1.0, average over the 13 folds): 0.018 vs 0.014 (5 days), 0.021 vs 0.019 (20 days), 0.023 vs 0.020 (60 days). The two are close, so the model is not simply memorising its training data.
+Validation score inside training vs test score (v1.0, average over the 13 folds): 0.016 vs 0.015 (5 days), 0.020 vs 0.020 (20 days), 0.023 vs 0.020 (60 days). The two are close, so the model is not simply memorising its training data.
 
-- The skill did not come from the wrong stock list: 5 and 20 days are slightly stronger on the true index.
-- 60 days is weaker and less steady (four negative years).
-- 2024, the most recent test year, is negative at 20 and 60 days.
-- Diebold-Mariano tests on forecast error do not beat the Random Walk at any horizon (p 0.10–0.46): the skill is in the ranking, not in the size of the forecast.
+- The skill did not come from the wrong stock list: 5 and 20 days are slightly stronger on the true index, 60 days slightly weaker.
+- 2024, the most recent test year, is negative at 20 and 60 days. 2019 and 2021 are about zero at 20 days.
+- **How much a result moves by chance.** The last two rows of the stock-list table differ by five stocks out of 727, yet single years moved by up to 0.015 (20 days, 2016: 0.032 → 0.047) and the 13-year score by 0.0005–0.0008. Any add-on has to beat v1.0 by clearly more than that, in most years, to count.
 
-How these numbers compare with other tools and research: [`market-comparison.md`](market-comparison.md).
+### 0b. What the ranking is worth in plain numbers (universe v2)
+
+Stocks sorted each week by the v1.0 forecast, test years 2012–2024. Excess = log return minus SPY's. Files `rank_groups_h*.csv` in each run folder.
+
+| Rank group | 5d: beat SPY · mean excess | 20d: beat SPY · mean excess | 60d: beat SPY · mean excess |
+|---|---|---|---|
+| Bottom 20% | 48.4% · −0.15% | 47.7% · −0.60% | 47.4% · −1.37% |
+| 20–40% | 49.1% · −0.10% | 48.9% · −0.36% | 48.1% · −1.02% |
+| 40–60% | 49.6% · −0.08% | 49.5% · −0.31% | 48.9% · −0.89% |
+| 60–80% | 49.8% · −0.04% | 49.8% · −0.17% | 49.5% · −0.71% |
+| Top 20% | 50.2% · −0.03% | 49.9% · −0.14% | 50.1% · −0.62% |
+| **Top minus bottom** | **+0.12%**, 11/13 years | **+0.46%**, 11/13 years | **+0.76%**, 10/13 years |
+| All stocks (for reference) | 49.4% | 49.2% | 48.8% |
+
+- The ordering is right at every step: each group does better than the one below it.
+- The typical stock trails SPY slightly (an index is carried by a few big winners), so the top group only **matches** the market. The measurable value is **avoiding the bottom group**. Making the top group beat the market is the main accuracy goal.
+- Before trading costs. Comparison with what other tools advertise: [`market-comparison.md`](market-comparison.md).
 
 **How to read the metrics**
 
 - **Hit rate:** share of stock-dates where the model got the direction vs SPY right (50% = coin flip).
 - **Rank IC:** correlation between predicted and actual ranking of stocks on each date, averaged. 0.02–0.05 is considered useful in practice.
 - **IC t-stat:** Newey-West t-statistic of the rank IC; about 2 means statistically significant.
+
+### 0c. The model in daily use (trained 16 Nov 2026 on all data)
+
+One training run, `python -m scripts.kaggle_cloud final-model`: 722 stocks, 2.7 million rows, prices 3 Jan 2000 to 5 Nov 2026, the v1.0 recipe unchanged. Saved as `models/latticeiq_v1.npz`.
+
+| Horizon | Training rows | Trust factor k | Rank IC, mid-2021 to late 2026, model trained to mid-2021 |
+|---|---|---|---|
+| 5 days | 2,707,124 | 0.37 | +0.009 |
+| 20 days | 2,698,770 | 0.20 | +0.001 |
+| 60 days | 2,676,420 | 0.17 | +0.003 |
+
+The last column is the check the recipe makes to set k: a copy trained on the first 80% of dates, never retrained, scored on the rest. It is harder than the walk-forward test above (retrained every year; rank IC 0.015 to 0.020 over 2012–2024) and it is not the holdout test, but it points the same way as the negative 2024 in the walk-forward runs: the edge has been thin in recent years and clearly positive only at 5 days. This is not a number to advertise and nothing is tuned from it.
 
 ## 1. Return ranking (20-day horizon): feature ablation
 
@@ -64,7 +98,7 @@ Rank IC by year for the best setup: 2012 0.014 · 2013 0.006 · 2014 0.006 · 20
 
 - Kronos on its own ranks stocks weakly and inconsistently (negative in 6 of 13 years) and its raw forecasts are far too large (RMSE 0.140 vs 0.074).
 - Adding Kronos to XGBoost changes rank IC by +0.0007: better in 6 years, worse in 5. That is within noise, and Kronos features are not among the top features.
-- **Decision:** Kronos is not in the final FYP-1 model (no reliable gain, and it would need a daily GPU run). Interesting detail for FYP-2: Kronos did well in 2016 when XGBoost did badly, so it may help in an ensemble or after fine-tuning on US stocks.
+- **Decision:** Kronos is not in the model (no reliable gain, and it would need a daily GPU run). Interesting detail for later: Kronos did well in 2016 when XGBoost did badly, so it may help in an ensemble or after fine-tuning on US stocks.
 
 ### TimesFM 2.5 (zero-shot, weekly forecasts)
 
@@ -197,10 +231,13 @@ All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), s
 ## 7. Pending
 
 - ARIMA baseline
-- Brackets with calibrated P(up) for 5 / 60 days
+- Volatility range model vs quantile XGBoost on universe v2 (interval score)
+- News sentiment vs v1.0 on 2018–2024 (download built 16 Nov)
+- Crash risk, recovery, sector-neutral target on real data
 
 ## Limitations
 
-- Skill is small: the final ensemble just passes the 5% significance bar (t 2.04). This is normal for honest stock forecasting; large claimed accuracies usually come from look-ahead bias.
-- Survivorship bias and the A–PCAR universe (see [`data-sources.md`](data-sources.md)).
+- Skill is small: v1.0's rank IC is 0.015–0.020 (t 2.2–3.2). This is normal for honest stock forecasting; large claimed accuracies usually come from look-ahead bias.
+- The edge has been weak recently: 2024 is negative at 20 and 60 days, and the daily model's own check on mid-2021 to late 2026 is close to zero except at 5 days (section 0c).
+- Survivorship bias in the early training years: 67% of true members have prices before 2012 (91% on average in the test years). See [`data-sources.md`](data-sources.md).
 - Transaction costs are not modelled yet.

@@ -36,7 +36,9 @@ sequenceDiagram
 | `timesfm --timing` | TimesFM speed test | ~5 min |
 | `timesfm --years 2010 2024` | TimesFM weekly forecasts with quantiles | estimated by the timing run |
 | `fundamentals-download` | SEC EDGAR download | CPU |
-| `news-download --start 2015-01 --end 2019-12` | Benzinga download | CPU |
+| `final-model` | Train v1.0 on all data and save `models/latticeiq_v1.npz` (the daily model) | ~6 min |
+| `news-score` | Sentiment score for every news article (FinBERT) | depends on the number of articles |
+| `news-download --start 2015-01 --end 2019-12` | Old Benzinga plan download (replaced by `python -m src.ingest.alpaca_news` on the PC) | CPU |
 | `status <job>` / `download <job>` | Check / fetch a job | — |
 
 Add `--no-wait` to start a job and return immediately.

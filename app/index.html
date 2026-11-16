@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LatticeIQ</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#overview" data-view="overview" aria-label="LatticeIQ overview">Lattice<span>IQ</span></a>
+  <nav class="views" aria-label="Pages">
+    <button type="button" data-view="overview">Overview</button>
+    <button type="button" data-view="stocks">Stocks</button>
+    <button type="button" data-view="record">Track record</button>
+  </nav>
+  <div class="search" role="search">
+    <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13.5 13.5 18 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <label class="sr" for="q">Find a stock</label>
+    <input id="q" type="search" placeholder="Find a stock by name or ticker" autocomplete="off" spellcheck="false"
+           role="combobox" aria-expanded="false" aria-controls="hits" aria-autocomplete="list">
+    <kbd aria-hidden="true">/</kbd>
+    <ul class="hits" id="hits" role="listbox" hidden></ul>
+  </div>
+  <div class="look" role="group" aria-label="Look ahead">
+    <span class="look-label">Look ahead</span>
+    <span class="seg">
+      <button type="button" data-h="5">5 days</button>
+      <button type="button" data-h="20" aria-pressed="true">20 days</button>
+      <button type="button" data-h="60">60 days</button>
+    </span>
+  </div>
+  <button type="button" class="icon" id="theme" aria-label="Switch between light and dark">
+    <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M10 2a8 8 0 1 0 0 16V2z" fill="currentColor"/><circle cx="10" cy="10" r="7.25" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+  </button>
+</header>
+<div class="under">
+  <div class="tape" id="tape" aria-label="Market and sector funds today"></div>
+  <p class="stale" id="stale" role="status" hidden></p>
+</div>
+
+<main id="overview" class="overview" hidden></main>
+
+<main id="stocks" class="stocks" hidden>
+  <aside class="rail" aria-label="All stocks">
+    <div class="tabs" role="tablist" aria-label="Which stocks to list">
+      <button type="button" role="tab" data-filter="all" aria-selected="true">All</button>
+      <button type="button" role="tab" data-filter="star" aria-selected="false">Starred</button>
+      <button type="button" role="tab" data-filter="earn" aria-selected="false">Earnings soon</button>
+    </div>
+    <div class="sortrow">
+      <label for="sort">Sort</label>
+      <select id="sort">
+        <option value="az">A to Z</option>
+        <option value="move">Biggest move today</option>
+        <option value="narrow">Narrowest range</option>
+        <option value="wide">Widest range</option>
+        <option value="earn">Earnings soonest</option>
+        <option value="rank">Model rank, highest first</option>
+        <option value="rankl">Model rank, lowest first</option>
+      </select>
+    </div>
+    <ol class="list" id="list"></ol>
+    <p class="scale" id="scale"></p>
+  </aside>
+
+  <section class="stage">
+    <div class="head">
+      <div class="who">
+        <span class="logo big" id="logo"></span>
+        <div class="symline"><h1 id="name">&nbsp;</h1><span class="tk" id="sym"></span>
+          <button type="button" class="star" id="star" aria-pressed="false" aria-label="Star this stock">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.5l6.1-.7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          </button></div>
+      </div>
+      <div class="px">
+        <span id="price" class="price"></span>
+        <span id="chg" class="chgline"></span>
+        <span id="pxnote" class="pxnote"></span>
+      </div>
+    </div>
+    <div class="chips" id="chips"></div>
+
+    <h2 class="fc-title">Where the price is likely to be</h2>
+    <div class="fc" id="fc"></div>
+    <p class="fine fcnote" id="fcnote"></p>
+
+    <div class="chartcard" id="chartcard">
+      <div class="toolbar">
+        <p class="perf" id="perf"></p>
+        <div class="tools">
+          <div class="periods" role="group" aria-label="How much history to show">
+            <button type="button" data-p="1W">1W</button>
+            <button type="button" data-p="1M">1M</button>
+            <button type="button" data-p="3M" aria-pressed="true">3M</button>
+            <button type="button" data-p="6M">6M</button>
+            <button type="button" data-p="1Y">1Y</button>
+          </div>
+          <div class="periods" role="group" aria-label="Chart type">
+            <button type="button" data-c="line" aria-pressed="true">Line</button>
+            <button type="button" data-c="candles">Candles</button>
+          </div>
+          <button type="button" class="icon" id="volbtn" aria-pressed="true" aria-label="Show or hide the volume bars" title="Volume">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 20v-6M10 20V9M15 20v-9M20 20V5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="icon" id="maxbtn" aria-pressed="false" aria-label="Make the chart larger" title="Larger chart">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="chart" class="chart" role="img" aria-label="Price chart with the likely price range ahead. Point at it for the price on a day, or at the shaded cone for the range on a future day."></div>
+      <p class="legend">
+        <span><i class="sw l50"></i>Likely half the time</span>
+        <span><i class="sw l80"></i>4 times in 5</span>
+        <span><i class="sw l90"></i>9 times in 10</span>
+        <span><i class="sw ex"></i>Earnings expected</span>
+        <span><i class="sw ep">E</i>Past earnings report</span>
+      </p>
+    </div>
+
+    <p class="say" id="say"></p>
+    <p class="warn" id="warn" hidden></p>
+    <div class="tiles" id="tiles"></div>
+
+    <section class="analyst" id="analyst" hidden>
+      <h2>What analysts expect in 12 months</h2>
+      <div class="an-grid">
+        <div class="an-chart" id="an-chart"></div>
+        <div class="an-side" id="an-side"></div>
+      </div>
+      <p class="fine" id="an-note"></p>
+    </section>
+    <button type="button" class="pick" id="pick">Choose another stock</button>
+  </section>
+
+  <aside class="side">
+    <section>
+      <h2 id="ladder-title">Likely price range</h2>
+      <div class="ladder" id="ladder"></div>
+      <p class="fine" id="ladder-note"></p>
+    </section>
+    <section>
+      <h2>Scheduled</h2>
+      <div id="sched"></div>
+    </section>
+    <section>
+      <h2>Company filings</h2>
+      <ul class="filings" id="filings"></ul>
+    </section>
+    <section>
+      <h2>Rank against the market</h2>
+      <div id="rankbox"></div>
+      <p class="fine">How the ranking did in 13 years of tests is on the <button type="button" class="link" data-view="record">Track record</button> page.</p>
+    </section>
+  </aside>
+</main>
+
+<main id="record" class="record" hidden></main>
+
+<footer class="foot">
+  <p id="asof"></p>
+  <p>Not investment advice. Ranges describe past behaviour and can be wrong.
+     Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts™</a>.
+     <span id="credit-logodev" hidden><a href="https://logo.dev" target="_blank" rel="noopener">Logos provided by Logo.dev</a>.</span>
+     <span id="credit-tickerlogos" hidden><a href="https://www.allinvestview.com/tools/ticker-logos/" target="_blank">Logos by AllInvestView</a>.</span></p>
+</footer>
+
+<script src="config.js"></script>
+<script src="logos.js"></script>
+<script src="vendor/lightweight-charts.standalone.production.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

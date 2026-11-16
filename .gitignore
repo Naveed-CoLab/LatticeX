@@ -11,6 +11,9 @@ data/*
 !data/README.md
 *.parquet
 
+# ---- Dashboard data: built by scripts/export_dashboard.py from licensed prices ----
+app/data/
+
 # ---- Trained models / checkpoints ----
 models/*
 !models/README.md
