@@ -83,6 +83,11 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 
 ## Work log (newest first)
 
+### 16 Nov 2026 — Methodology page with sources; the README's illustration replaced by a real result
+- Published to GitHub: commit `12cd197` (daily model, dashboard, faster news download, docs).
+- New `docs/methodology.md`: every method in plain words with why it was chosen and the research behind it: the question, data without hindsight, the 44 inputs and the papers that documented each effect, the model and its training, walk-forward testing with a gap and a locked holdout, each score, price ranges, the methods tested and dropped, the news test, limits. 36 references (journal articles, books and arXiv papers; arXiv numbers checked).
+- README: the "what one forecast shows" picture used made-up prices. It is replaced by a chart of real test results (how often each v1.0 rank group beat SPY over 20 days, 2012–2024, from `rank_groups_h20.csv`). The banner stays as a labelled illustration: the free price data may not be republished, so no real-price pictures or dashboard screenshots are in the repo.
+
 ### 16 Nov 2026 — News download made about 5 times faster; price-range run at 60 days found failed
 - The first version fetched every article (about 12,000 a month) to keep the third that name our stocks, one request at a time: about 1 request a second, 10 hours in all. It now asks Alpaca only for articles naming our stocks (in groups of 200 tickers, Alpaca spelling `BRK.B`) and fetches 3 months at once, staying under the 200-a-minute limit: about 95 requests a month instead of 240, three in parallel. The six months already saved are kept (same content, fetched the old way).
 - If Alpaca refuses the long request, the message says to add `--group 50`.

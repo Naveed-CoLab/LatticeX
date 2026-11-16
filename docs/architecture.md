@@ -1,6 +1,6 @@
 # Architecture
 
-How LatticeIQ turns raw data into forecasts, how it serves them every day, and how it avoids fooling itself. The overview, the component table, the server interface and the list of data files are in the main [`README`](../README.md#system-architecture); this page holds the design detail behind them.
+How LatticeIQ turns raw data into forecasts, how it serves them every day, and how it avoids fooling itself. The overview, the component table, the server interface and the list of data files are in the main [`README`](../README.md#system-architecture); this page holds the design detail behind them. The methods explained in plain words, with the research behind each, are in [`methodology.md`](methodology.md).
 
 Contents: [Two halves](#two-halves-of-the-system) · [Research pipeline](#research-pipeline) · [Targets](#targets) · [Features](#features) · [Ranking model v1.0](#ranking-model-v10) · [Evaluation rules](#evaluation-rules) · [Point-in-time rules](#point-in-time-rules-no-look-ahead) · [Price ranges](#price-ranges) · [Daily model](#daily-model-train-once-score-daily) · [Daily prices](#daily-prices) · [Local server](#local-server) · [Dashboard](#dashboard) · [Failure handling](#failure-handling) · [Compute](#compute)
 

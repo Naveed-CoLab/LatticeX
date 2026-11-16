@@ -262,6 +262,7 @@ Data, method, results with their limits, the data error and how it was handled, 
 | Document | Use it for |
 |---|---|
 | [`../README.md`](../README.md) | The product, results, models picked and dropped, architecture, requirements |
+| [`methodology.md`](methodology.md) | The methods in plain words, with the published research behind each one |
 | [`architecture.md`](architecture.md) | Design detail |
 | [`decisions.md`](decisions.md) | Every model and feature decision with its numbers |
 | [`results.md`](results.md) | All results tables and limits |

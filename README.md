@@ -30,7 +30,7 @@ A university final-year project (2026), built to become a product. **New here? S
 
 > **Not investment advice.** This is a research project. All results are historical backtests, and no return or profit claim is made.
 
-**Writing a requirements (SRS) or design (SDS) document from this repo?** Use [Requirements](#requirements) for the SRS and [System architecture](#system-architecture) plus [`docs/architecture.md`](docs/architecture.md) for the SDS. Every model choice with its numbers is in [Models](#models-what-we-picked-and-what-we-dropped) and [`docs/decisions.md`](docs/decisions.md). Terms are explained in the [Glossary](#glossary).
+**Writing a requirements (SRS) or design (SDS) document from this repo?** Use [Requirements](#requirements) for the SRS and [System architecture](#system-architecture) plus [`docs/architecture.md`](docs/architecture.md) for the SDS. The methods and the published research behind each one are in [`docs/methodology.md`](docs/methodology.md). Every model choice with its numbers is in [Models](#models-what-we-picked-and-what-we-dropped) and [`docs/decisions.md`](docs/decisions.md). Terms are explained in the [Glossary](#glossary).
 
 ---
 
@@ -62,9 +62,11 @@ For every S&P 500 stock, after each market close:
 | **What analysts expect** | 12-month price targets and buy / hold / sell counts, shown as opinions and not tested | Yahoo Finance |
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/forecast_card_dark.png">
-  <img alt="Example forecast: a candlestick chart with volume, a shaded 50/80/90% price cone for the next 20 trading days, and a panel with rank, expected return vs the market, price ranges and main drivers" src="docs/assets/forecast_card_light.png" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/rank_groups_dark.png">
+  <img alt="Real test results 2012 to 2024: share of 20-day forecasts where the stock beat SPY, by v1.0 rank group. Bottom 20% 47.7%, 20-40% 48.9%, 40-60% 49.5%, 60-80% 49.8%, top 20% 49.9%; all stocks 49.2%" src="docs/assets/rank_groups_light.png" width="100%">
 </picture>
+
+<sub>Real results from run `20261114_0809` (file `results/20261114_0809_real_stock_h20_fund_sect/rank_groups_h20.csv`). Screenshots of the dashboard are not included because the free price data it shows may not be republished; the banner at the top is a labelled illustration.</sub>
 
 It does **not** give buy or sell calls, a probability that a stock goes up, an accuracy percentage or any profit figure. Each of those was either tested and failed or cannot be proven (see [what we claim](#what-we-claim-and-what-we-dont)).
 
@@ -499,6 +501,7 @@ LatticeX/
 | Doc | Use it for |
 |---|---|
 | [`docs/project-flow.md`](docs/project-flow.md) | **Start here.** The project step by step: what was done, why, the result, the evidence, and what is next |
+| [`docs/methodology.md`](docs/methodology.md) | **The methods in plain words, with the published research behind each one** (36 references) |
 | [`docs/architecture.md`](docs/architecture.md) | Design detail: pipeline, evaluation rules, look-ahead rules, daily model, range model, server |
 | [`docs/decisions.md`](docs/decisions.md) | **Which models and features are in or out, and why**; data errors found and fixed; product decisions |
 | [`docs/results.md`](docs/results.md) | All results tables and limitations |
