@@ -83,6 +83,13 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 
 ## Work log (newest first)
 
+### 16 Nov 2026 — Dashboard: sidebar filters, compact list, rank moved up
+- **Sidebar filters** on the Stocks page: sector, today's move (up/down), the model's rank (top or bottom 20%) and range (calm = narrowest third, wild = widest third), with a count of how many are on, "Clear filters", a count of stocks shown, and an empty state that offers to clear them. Rank and range follow the look-ahead; filters are remembered in the browser; the panel folds away (closed by default on phones).
+- **Compact list rows** (about 50 px instead of 90): logo, ticker, small chart, price and change. The second line shows the company name, or the number the list is sorted or filtered by (rank, range, earnings date). The range bar per row is gone; range width is now a filter and a sort.
+- **"Against the market"** (the model's rank for 5, 20, 60 days and what that rank did in testing) moved from the bottom of the side panel to right under the price.
+- **Sector** comes from the industry code each company reports to the SEC, now kept by the daily filings check (`data/live/companies.json`) and mapped to 11 sectors (`SIC_SECTORS` in `scripts/export_dashboard.py`; a few known exceptions such as Visa and Mastercard → Financials). Tried first: sectors from price behaviour (the model's own sector features); rejected for display because it put Apple and Union Pacific in Consumer staples. The filter appears after the next filings check; `run_dashboard` runs that check once if the codes are missing.
+- Checked in the simulation: light and dark, 1440, 1280 and phone widths, filters on and off, no sectors file, Overview and Track record pages. 44 tests (1 new: industry codes of well-known companies map to the expected sector).
+
 ### 16 Nov 2026 — Methodology page with sources; the README's illustration replaced by a real result
 - Published to GitHub: commit `12cd197` (daily model, dashboard, faster news download, docs).
 - New `docs/methodology.md`: every method in plain words with why it was chosen and the research behind it: the question, data without hindsight, the 44 inputs and the papers that documented each effect, the model and its training, walk-forward testing with a gap and a locked holdout, each score, price ranges, the methods tested and dropped, the news test, limits. 36 references (journal articles, books and arXiv papers; arXiv numbers checked).

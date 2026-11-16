@@ -145,6 +145,56 @@ def frozen_prices() -> pd.DataFrame:
     return pd.read_parquet(path("clean") / "prices.parquet", columns=PRICE_COLS)
 
 
+# SEC industry code (SIC) -> one of 11 sectors. SIC is what every company reports to the SEC; the ranges follow
+# the SEC's own division of industries, with the usual adjustments (drugs, medical devices, software and
+# semiconductors, food and household goods, REITs). Approximate: the commercial GICS sectors are licensed.
+SIC_SECTORS = [
+    (100, 999, "Consumer staples"), (1000, 1199, "Materials"), (1200, 1399, "Energy"), (1400, 1499, "Materials"),
+    (1520, 1531, "Consumer cyclical"), (1500, 1799, "Industrials"), (2000, 2199, "Consumer staples"),
+    (2200, 2399, "Consumer cyclical"), (2400, 2499, "Materials"), (2500, 2599, "Consumer cyclical"),
+    (2600, 2699, "Materials"), (2700, 2799, "Communication"), (2830, 2836, "Health care"),
+    (2840, 2844, "Consumer staples"), (2800, 2899, "Materials"), (2900, 2999, "Energy"), (3000, 3099, "Materials"),
+    (3100, 3199, "Consumer cyclical"), (3200, 3399, "Materials"), (3400, 3569, "Industrials"),
+    (3570, 3579, "Technology"), (3580, 3629, "Industrials"), (3630, 3659, "Consumer cyclical"),
+    (3660, 3699, "Technology"), (3710, 3716, "Consumer cyclical"), (3700, 3799, "Industrials"),
+    (3840, 3851, "Health care"), (3800, 3899, "Technology"), (3900, 3999, "Consumer cyclical"),
+    (4700, 4799, "Consumer cyclical"), (4000, 4799, "Industrials"), (4800, 4899, "Communication"),
+    (4950, 4959, "Industrials"), (4900, 4999, "Utilities"), (5122, 5122, "Health care"),
+    (5140, 5149, "Consumer staples"), (5000, 5199, "Industrials"), (5400, 5499, "Consumer staples"),
+    (5331, 5331, "Consumer staples"), (5912, 5912, "Consumer staples"), (5200, 5999, "Consumer cyclical"),
+    (6324, 6324, "Health care"), (6798, 6798, "Real estate"), (6500, 6599, "Real estate"), (6000, 6799, "Financials"),
+    (7000, 7299, "Consumer cyclical"), (7310, 7319, "Communication"), (7370, 7379, "Technology"),
+    (7300, 7399, "Industrials"), (7800, 7899, "Communication"), (7900, 7999, "Consumer cyclical"),
+    (8000, 8099, "Health care"), (8700, 8799, "Industrials"),
+]
+
+
+# companies whose SEC code points elsewhere than where investors place them
+SECTOR_FIX = {"V": "Financials", "MA": "Financials", "PYPL": "Financials", "DIS": "Communication"}
+
+
+def sic_sector(sic, ticker: str | None = None) -> str | None:
+    if ticker in SECTOR_FIX:
+        return SECTOR_FIX[ticker]
+    try:
+        n = int(sic)
+    except (TypeError, ValueError):
+        return None
+    return next((name for lo, hi, name in SIC_SECTORS if lo <= n <= hi), None)
+
+
+def companies() -> dict:
+    """{ticker: {"sector": ..., "industry": ...}} from data/live/companies.json, which the SEC filings check
+    writes (src/ingest/sec_events.py). Empty until the first check after this was added."""
+    f = ROOT / "data" / "live" / "companies.json"
+    if not f.exists():
+        print("No company industry codes yet; the sector filter appears after the next SEC filings check.")
+        return {}
+    raw = json.loads(f.read_text(encoding="utf-8"))
+    return {t: {"sector": sic_sector(v.get("sic"), t), "industry": (v.get("industry") or "").strip().capitalize() or None}
+            for t, v in raw.items()}
+
+
 def stock_rows(px: pd.DataFrame, tickers) -> pd.DataFrame:
     px = px[px["ticker"].isin(tickers) & (px[["open", "high", "low", "close"]] > 0).all(axis=1)]
     return px.sort_values(["ticker", "date"]).reset_index(drop=True)
@@ -219,6 +269,7 @@ def main() -> None:
         print("NOTE: no updated prices yet (data/live/prices.parquet). Showing the saved research prices, which "
               "stop on the day they were downloaded. Run `python -m scripts.run_dashboard` to update.")
     funds = px[px["ticker"].isin(MARKET)].sort_values(["ticker", "date"])
+    info = companies()
     px = stock_rows(px, u["ticker"])
     # One market day for everything: the latest day that 9 in 10 stocks have reached. If a download stopped
     # half-way, some stocks are days ahead of others and "today's biggest moves" would mix different days.
@@ -319,12 +370,13 @@ def main() -> None:
                  "earnings": {"next": f"{show:%Y-%m-%d}" if show is not None else None,
                               "reported": f"{reported:%Y-%m-%d}" if reported is not None else None,
                               "history": hist, "typical": typical},
-                 "filings": filings,
+                 "filings": filings, "sector": info.get(t, {}).get("sector"),
+                 "industry": info.get(t, {}).get("industry"),
                  "rank": ({h: {"pos": v[0], "pct": v[1], "exp": v[2]} for h, v in rank["stocks"][t].items()}
                           if rank and t in rank["stocks"] else None)}
         (out / "stocks" / f"{t}.json").write_text(json.dumps(stock, separators=(",", ":")), encoding="utf-8")
         sp = adj[-30:] / adj[-30:][0]
-        index.append({"t": t, "name": stock["name"], "price": stock["price"], "chg": stock["chg"],
+        index.append({"t": t, "name": stock["name"], "sec": info.get(t, {}).get("sector"), "price": stock["price"], "chg": stock["chg"],
                       "w": {h: rng[h]["half"]["80"] for h in rng}, "earn": {h: rng[h]["earn"] for h in rng},
                       "next_earn": stock["earnings"]["next"], "reported": stock["earnings"]["reported"], "chg5": stats["chg5"], "chg20": stats["chg20"],
                       "flag": flag, "spark": [round(float(x), 3) for x in sp],

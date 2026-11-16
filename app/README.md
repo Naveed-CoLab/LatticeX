@@ -29,6 +29,22 @@ The big price becomes today's price, with the last close underneath. Before the 
 
 About 20 minutes after the close the dashboard downloads the finished day, rebuilds every forecast from it and the page reloads itself, so it can be left running. `start_dashboard.bat` in the project folder starts it in a minimised window with a double-click.
 
+## Finding stocks: the sidebar
+
+The list on the left of the Stocks page can be narrowed down and sorted:
+
+- **All / Starred / Earnings soon** at the top.
+- **Filters** (the panel opens and closes; the number shows how many are on; "Clear filters" resets them):
+  - **Sector**: from the industry code each company reports to the SEC (for example 3674 semiconductors → Technology), sorted into 11 sectors. The codes are collected by the daily SEC filings check (`data/live/companies.json`); until the first check after this was added, the sector filter is not shown. It is an approximation of the usual sector names, which belong to a commercial classification.
+  - **Today**: stocks up or down so far today.
+  - **Rank**: the model's top or bottom 20% against the market.
+  - **Range**: calm (the narrowest third of ranges) or wild (the widest third).
+- **Sort** next to the count of stocks shown. When the list is sorted or filtered by rank, range or earnings, the second line of each row shows that number instead of the company name.
+
+Rank and range filters follow the look-ahead chosen at the top (5, 20 or 60 days). The filters are remembered in this browser.
+
+On each stock page, **Against the market** (the model's rank for 5, 20 and 60 days and what that rank did in testing) sits right under the price, before the price ranges.
+
 ## The chart
 
 - **Line or candles.** A line with a soft fill by default (green when the chosen period is up, red when it is down) or candles; the choice is remembered.

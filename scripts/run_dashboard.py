@@ -168,7 +168,8 @@ def update_filings() -> bool:
     new, old = path("clean") / "sec_events_latest.parquet", path("clean") / "sec_events.parquet"
     if not old.exists():
         return False
-    if new.exists() and time.time() - new.stat().st_mtime < FILINGS_EVERY_HOURS * 3600:
+    have_codes = (ROOT / "data" / "live" / "companies.json").exists()      # industry codes for the sector filter
+    if new.exists() and have_codes and time.time() - new.stat().st_mtime < FILINGS_EVERY_HOURS * 3600:
         return False
     from src.ingest import sec_events
     since = pd.read_parquet(old, columns=["filed"])["filed"].max()
@@ -186,7 +187,7 @@ def needs_build() -> bool:
     if not INDEX.exists():
         return True
     built = INDEX.stat().st_mtime
-    inputs = [ROOT / "data" / "live" / "prices.parquet", ROOT / "data" / "live" / "rank.json", path("clean") / "sec_events_latest.parquet",
+    inputs = [ROOT / "data" / "live" / "prices.parquet", ROOT / "data" / "live" / "rank.json", ROOT / "data" / "live" / "companies.json", path("clean") / "sec_events_latest.parquet",
               ROOT / "scripts" / "export_dashboard.py", ROOT / "src" / "models" / "vol_ranges.py"]
     return any(f.exists() and f.stat().st_mtime > built for f in inputs)
 

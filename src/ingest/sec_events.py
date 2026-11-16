@@ -81,6 +81,9 @@ def describe(items: str) -> str:
     return "; ".join(t[1] for t in known) or "routine filing"
 
 
+COMPANY = {}      # ticker -> {"sic": industry code, "industry": the SEC's description}, filled by fetch()
+
+
 def fetch(ticker: str, cik: int, full: bool = True) -> pd.DataFrame:
     parts = []
     ciks = [cik] + (PREDECESSOR_CIKS.get(ticker, []) if full else [])
@@ -90,6 +93,8 @@ def fetch(ticker: str, cik: int, full: bool = True) -> pd.DataFrame:
             continue
         r.raise_for_status()
         j = r.json()
+        if not n and j.get("sic"):
+            COMPANY[ticker] = {"sic": str(j.get("sic")), "industry": j.get("sicDescription") or ""}
         if n:                                          # earlier registrant of the same business
             if not predecessor_ok(c, j.get("name", "?")):
                 continue
@@ -152,6 +157,18 @@ def combine() -> pd.DataFrame:
     return df
 
 
+def save_companies() -> None:
+    """Each company's SEC industry code, for the dashboard's sector filter: data/live/companies.json."""
+    if not COMPANY:
+        return
+    import json
+    from src.config import ROOT
+    f = ROOT / "data" / "live" / "companies.json"
+    old = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({**old, **COMPANY}, sort_keys=True), encoding="utf-8")
+
+
 def latest(tickers: list, days: int = 7) -> pd.DataFrame:
     """LIVE feed: re-read each company's most recent filings and list the 8-Ks of the last `days` days."""
     ciks = cik_map()
@@ -163,6 +180,7 @@ def latest(tickers: list, days: int = 7) -> pd.DataFrame:
             if len(df):
                 parts.append(df[df["accepted"] >= since])
             time.sleep(0.12)
+    save_companies()
     ev = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
     if ev.empty:
         print(f"No 8-K filings in the last {days} days.")

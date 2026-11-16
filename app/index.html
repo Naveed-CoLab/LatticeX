@@ -48,16 +48,37 @@
       <button type="button" role="tab" data-filter="star" aria-selected="false">Starred</button>
       <button type="button" role="tab" data-filter="earn" aria-selected="false">Earnings soon</button>
     </div>
+    <div class="filters">
+      <div class="fhead">
+        <button type="button" class="ftoggle" id="ftoggle" aria-expanded="true" aria-controls="fbody">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h12M4.5 8h7M7 12h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Filters<b id="fcount" hidden></b>
+          <svg class="chev" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="fclear" id="fclear" hidden>Clear filters</button>
+      </div>
+      <div class="fbody" id="fbody">
+        <label class="frow" id="frow-sec"><span>Sector</span>
+          <select id="f-sec"><option value="">All sectors</option></select></label>
+        <div class="frow" role="group" aria-labelledby="fl-move"><span id="fl-move">Today</span>
+          <span class="seg sm"><button type="button" data-fk="move" data-fv="" aria-pressed="true">Any</button><button type="button" data-fk="move" data-fv="up" aria-pressed="false">Up</button><button type="button" data-fk="move" data-fv="down" aria-pressed="false">Down</button></span></div>
+        <div class="frow" role="group" aria-labelledby="fl-rank"><span id="fl-rank" title="Where the model ranks the stock against the market for the look-ahead chosen at the top">Rank</span>
+          <span class="seg sm"><button type="button" data-fk="rank" data-fv="" aria-pressed="true">Any</button><button type="button" data-fk="rank" data-fv="top" aria-pressed="false">Top 20%</button><button type="button" data-fk="rank" data-fv="bottom" aria-pressed="false">Bottom 20%</button></span></div>
+        <div class="frow" role="group" aria-labelledby="fl-range"><span id="fl-range" title="How wide the stock's likely price range is, compared with the other stocks">Range</span>
+          <span class="seg sm"><button type="button" data-fk="range" data-fv="" aria-pressed="true">Any</button><button type="button" data-fk="range" data-fv="calm" aria-pressed="false">Calm</button><button type="button" data-fk="range" data-fv="wild" aria-pressed="false">Wild</button></span></div>
+      </div>
+    </div>
     <div class="sortrow">
-      <label for="sort">Sort</label>
+      <span class="count" id="count" role="status"></span>
+      <label for="sort" class="sr">Sort by</label>
       <select id="sort">
         <option value="az">A to Z</option>
         <option value="move">Biggest move today</option>
+        <option value="rank">Model rank, highest first</option>
+        <option value="rankl">Model rank, lowest first</option>
         <option value="narrow">Narrowest range</option>
         <option value="wide">Widest range</option>
         <option value="earn">Earnings soonest</option>
-        <option value="rank">Model rank, highest first</option>
-        <option value="rankl">Model rank, lowest first</option>
       </select>
     </div>
     <ol class="list" id="list"></ol>
@@ -80,6 +101,11 @@
       </div>
     </div>
     <div class="chips" id="chips"></div>
+
+    <section class="rankcard" aria-labelledby="rank-title">
+      <h2 id="rank-title">Against the market</h2>
+      <div id="rankbox"></div>
+    </section>
 
     <h2 class="fc-title">Where the price is likely to be</h2>
     <div class="fc" id="fc"></div>
@@ -146,11 +172,6 @@
     <section>
       <h2>Company filings</h2>
       <ul class="filings" id="filings"></ul>
-    </section>
-    <section>
-      <h2>Rank against the market</h2>
-      <div id="rankbox"></div>
-      <p class="fine">How the ranking did in 13 years of tests is on the <button type="button" class="link" data-view="record">Track record</button> page.</p>
     </section>
   </aside>
 </main>

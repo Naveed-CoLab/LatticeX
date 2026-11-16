@@ -827,3 +827,15 @@ def test_alpaca_news_download_keeps_our_stocks_and_benzinga_only(tmp_path, monke
     nf = news_features(saved, scores, pd.bdate_range("2024-02-01", "2024-05-10"), ["AAPL", "MSFT", "BRK-B"], False)
     assert nf["news_sent_5d"].max() == pytest.approx(0.5) and nf["news_cnt_5d"].max() > 0
 
+
+def test_sector_from_sec_industry_code():
+    """The dashboard's sector filter: SEC industry codes of well-known companies land in the expected sector."""
+    from scripts.export_dashboard import sic_sector
+    expected = {"3674": "Technology", "3571": "Technology", "7372": "Technology", "2834": "Health care", "3841": "Health care",
+                "6324": "Health care", "6021": "Financials", "6798": "Real estate", "2911": "Energy", "1311": "Energy",
+                "4911": "Utilities", "4011": "Industrials", "3721": "Industrials", "2840": "Consumer staples",
+                "5331": "Consumer staples", "5961": "Consumer cyclical", "3711": "Consumer cyclical", "5812": "Consumer cyclical",
+                "4813": "Communication", "2810": "Materials"}
+    assert {c: sic_sector(c) for c in expected} == expected
+    assert sic_sector("7389", "V") == "Financials" and sic_sector(None) is None and sic_sector("x") is None
+

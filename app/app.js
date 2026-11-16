@@ -6,7 +6,7 @@
   const cfg = window.LATTICE || {};
   const domains = window.LATTICE_DOMAINS || {};
   const LWC = window.LightweightCharts;
-  const state = { index: null, track: null, sel: null, h: "20", view: "overview", sort: "az", filter: "all", period: "3M", stock: null, stars: new Set(), hit: 0, today: { quotes: {}, state: null, fetched: null }, ctype: "line", vol: true };
+  const state = { index: null, track: null, sel: null, h: "20", view: "overview", sort: "az", filter: "all", f: { sec: "", move: "", rank: "", range: "" }, period: "3M", stock: null, stars: new Set(), hit: 0, today: { quotes: {}, state: null, fetched: null }, ctype: "line", vol: true };
   const cache = new Map();
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const PERIOD = { "1W": 5, "1M": 22, "3M": 66, "6M": 132, "1Y": 252 };
@@ -366,42 +366,85 @@
   }
 
   // ---------- stock list ----------
+  // the filters in the sidebar: sector, today's move, the model's rank and how wide the range is (both for the look-ahead chosen at the top)
+  function rangeCuts() {                                   // thirds of all stocks by range width: calm, middle, wild
+    const all = state.index.stocks.map((s) => s.w[state.h]).sort((a, b) => a - b);
+    return [all[Math.floor(all.length / 3)], all[Math.floor((all.length * 2) / 3)]];
+  }
+  function keep(s, cuts) {
+    const f = state.f, h = state.h;
+    if (f.sec && s.sec !== f.sec) return false;
+    if (f.move === "up" && !(C(s) > 0)) return false;
+    if (f.move === "down" && !(C(s) < 0)) return false;
+    if (f.rank === "top" && !(s.rk && s.rk[h] >= 0.8)) return false;
+    if (f.rank === "bottom" && !(s.rk && s.rk[h] <= 0.2)) return false;
+    if (f.range === "calm" && !(s.w[h] <= cuts[0])) return false;
+    if (f.range === "wild" && !(s.w[h] >= cuts[1])) return false;
+    return true;
+  }
+  const activeFilters = () => Object.values(state.f).filter(Boolean).length;
   function rows() {
-    const h = state.h;
+    const h = state.h, cuts = rangeCuts();
     let r = state.index.stocks;
     if (state.filter === "star") r = r.filter((s) => state.stars.has(s.t));
     if (state.filter === "earn") r = r.filter(soon);
+    r = r.filter((s) => keep(s, cuts));
     const by = { az: (a, b) => a.t.localeCompare(b.t), narrow: (a, b) => a.w[h] - b.w[h], wide: (a, b) => b.w[h] - a.w[h],
       move: (a, b) => Math.abs(C(b)) - Math.abs(C(a)),
       rank: (a, b) => (b.rk ? b.rk[h] : -1) - (a.rk ? a.rk[h] : -1), rankl: (a, b) => (a.rk ? a.rk[h] : 2) - (b.rk ? b.rk[h] : 2), earn: (a, b) => (a.next_earn || "9999").localeCompare(b.next_earn || "9999") };
     return r.slice().sort(by[state.filter === "earn" && state.sort === "az" ? "earn" : state.sort]);
   }
   function soon(s) { return !!s.next_earn && s.next_earn <= state.soonBy; }
-  function scaleMax() {
+  function scaleMax() {                                     // one width scale for every stock (the Overview's range bars)
     const all = state.index.stocks.map((s) => s.w[state.h]).sort((a, b) => a - b);
     return all[Math.floor(all.length * 0.97)] || 0.2;
   }
+  // the second line of a row: the company name, or the number the list is sorted or filtered by
+  function rowMeta(s) {
+    const h = state.h;
+    if ((state.sort === "rank" || state.sort === "rankl" || state.f.rank) && s.rk) {
+      const p = s.rk[h];
+      return `Ranked ${p >= 0.5 ? "top" : "bottom"} ${Math.max(1, Math.round((p >= 0.5 ? 1 - p : p) * 100))}%`;
+    }
+    if (state.sort === "narrow" || state.sort === "wide" || state.f.range) return `Range ±${pct(s.w[h])} in ${h} days`;
+    if ((state.sort === "earn" || state.filter === "earn") && s.next_earn) return `Earnings around ${day(s.next_earn)}`;
+    return s.name === s.t ? "" : esc(s.name);
+  }
+  function renderFilters() {
+    const sel = $("f-sec"), secs = [...new Set(state.index.stocks.map((s) => s.sec).filter(Boolean))].sort();
+    $("frow-sec").hidden = !secs.length;
+    if (sel.options.length !== secs.length + 1)
+      sel.innerHTML = `<option value="">All sectors</option>` + secs.map((x) => `<option>${esc(x)}</option>`).join("");
+    sel.value = state.f.sec;
+    document.querySelectorAll("[data-fk]").forEach((b) => b.setAttribute("aria-pressed", String(state.f[b.dataset.fk] === b.dataset.fv)));
+    const n = activeFilters();
+    $("fcount").hidden = !n; $("fcount").textContent = n;
+    $("fclear").hidden = !n;
+  }
   function renderList() {
-    const h = state.h, list = $("list"), r = rows(), max = scaleMax();
+    if (state.f.sec && !state.index.stocks.some((s) => s.sec === state.f.sec)) state.f.sec = "";   // a saved sector that is no longer there
+    const h = state.h, list = $("list"), r = rows();
     const n = { all: state.index.stocks.length, star: state.stars.size, earn: state.index.stocks.filter(soon).length };
     document.querySelectorAll("[data-filter]").forEach((b) => {
       b.setAttribute("aria-selected", String(b.dataset.filter === state.filter));
       b.innerHTML = `${{ all: "All", star: "Starred", earn: "Earnings soon" }[b.dataset.filter]}<b>${n[b.dataset.filter]}</b>`;
     });
-    $("scale").textContent = `Blue bar: how far the price may move in ${h} trading days, 4 times in 5. One scale for every stock.`;
+    renderFilters();
+    $("count").textContent = r.length === state.index.stocks.length ? `${r.length} stocks` : `${r.length} of ${state.index.stocks.length} stocks`;
+    $("scale").innerHTML = `Rank and range are for the next <b>${h} trading days</b>; change it with Look ahead at the top.`;
     if (!r.length) {
-      list.innerHTML = state.filter === "star"
+      list.innerHTML = activeFilters()
+        ? `<li class="empty"><strong>No stock matches these filters</strong>Loosen one of them, or <button type="button" class="link" data-clear>clear all filters</button>.</li>`
+        : state.filter === "star"
         ? `<li class="empty"><strong>No starred stocks yet</strong>Open a stock and press the star next to its name to keep it here.</li>`
         : `<li class="empty"><strong>Nothing to show</strong>No stock has an earnings report expected in the next 20 trading days.</li>`;
       return;
     }
     list.innerHTML = r.map((s) => `<li><button type="button" class="row" data-t="${s.t}"${s.t === state.sel ? ' aria-current="true"' : ""}>
-        ${logoTag(s.t)}
-        <span class="id"><span class="t">${s.t}${state.stars.has(s.t) ? '<span class="star-dot" title="Starred">★</span>' : ""}</span><span class="n">${s.name === s.t ? "" : esc(s.name)}</span></span>
-        ${spark(s.spark, 58, 24)}
-        <span class="num"><span class="p">${money(P(s))}</span>${pill(C(s))}</span>
-        <span class="width"><span class="track"><i style="width:${Math.min(100, (s.w[h] / max) * 100).toFixed(1)}%"></i></span>
-        <span>${s.earn[h] ? '<i class="e" title="${s.reported ? "Earnings were just reported" : "Earnings report expected in this window"}"></i>' : ""}±${pct(s.w[h])}</span></span>
+        ${logoTag(s.t, "md")}
+        <span class="id"><span class="t">${s.t}${s.earn[h] ? `<i class="e" title="${s.reported ? "Earnings were just reported" : "Earnings report expected in this window"}"></i>` : ""}${state.stars.has(s.t) ? '<span class="star-dot" title="Starred">★</span>' : ""}</span><span class="n">${rowMeta(s)}</span></span>
+        ${spark(s.spark, 48, 22)}
+        <span class="num"><span class="p">${money(P(s))}</span><span class="${C(s) >= 0 ? "up" : "down"}">${signed(C(s))}</span></span>
       </button></li>`).join("");
     paintLogos(list);
   }
@@ -473,7 +516,7 @@
       `<div class="rk-ends"><span>ranked lowest</span><span>ranked highest</span></div>
       <p class="rk-say">For the next ${h} trading days the model ranks ${s.t} <strong>${ordinal(x.pos)} of ${M.n}</strong>, in the <strong>${group}</strong>.` +
       (K ? ` In 13 years of tests, the bottom fifth beat the S&P 500 ${pct(K.bottom20_beat)} of the time and the top fifth ${pct(K.top20_beat)}: the ranking is better at flagging likely laggards than at picking winners.` : "") + `</p>
-      <p class="fine">A rank is the model's order of all stocks against the market, not a price. Model trained on data to ${day(M.trained_through)} ${M.trained_through.slice(0, 4)}; ranked after the close of ${day(s.asof, true)}.</p>`;
+      <p class="fine">A rank is the model's order of all stocks against the market, not a price. Model trained on data to ${day(M.trained_through)} ${M.trained_through.slice(0, 4)}; ranked after the close of ${day(s.asof, true)}. How the ranking did in 13 years of tests: <button type="button" class="link" data-view="record">Track record</button>.</p>`;
   }
   function renderStock(animate, data) {
     const s = state.stock, h = state.h, r = s.ranges[h], st = s.stats;
@@ -487,6 +530,7 @@
     $("star").setAttribute("aria-pressed", String(on));
     $("star").setAttribute("aria-label", on ? `Remove ${s.t} from starred` : `Star ${s.t}`);
     $("chips").innerHTML =
+      (s.sector ? `<span class="chip"${s.industry ? ` title="SEC industry: ${esc(s.industry)}"` : ""}>${esc(s.sector)}</span>` : "") +
       (s.earnings.reported ? `<span class="chip${r.earn && !inWin ? " amber" : ""}">${r.earn && !inWin ? '<i class="e"></i>' : ""}Reported earnings ${day(s.earnings.reported)}</span>` : "") +
       (s.earnings.next ? `<span class="chip${inWin ? " amber" : ""}">${inWin ? '<i class="e"></i>' : ""}${s.earnings.reported ? "Next earnings" : "Earnings"} around ${day(s.earnings.next)}</span>` : "") +
       `<span class="chip">Typical day<b>±${pct(s.vol)}</b></span>` +
@@ -896,6 +940,20 @@
       else if (!typing && state.view === "stocks" && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); step(e.key === "ArrowDown" ? 1 : -1); }
     });
     $("sort").addEventListener("change", (e) => { state.sort = e.target.value; renderList(); });
+    try { Object.assign(state.f, JSON.parse(store.get("lattice-filters") || "{}")); } catch (e) { /* none saved */ }
+    const setFilter = (k, v) => { state.f[k] = v; store.set("lattice-filters", JSON.stringify(state.f)); renderList(); $("list").scrollTop = 0; };
+    $("f-sec").addEventListener("change", (e) => setFilter("sec", e.target.value));
+    document.querySelectorAll("[data-fk]").forEach((b) => b.addEventListener("click", () => setFilter(b.dataset.fk, b.dataset.fv)));
+    const clearFilters = () => { state.f = { sec: "", move: "", rank: "", range: "" }; store.set("lattice-filters", "{}"); renderList(); };
+    $("fclear").addEventListener("click", clearFilters);
+    $("list").addEventListener("click", (e) => { if (e.target.closest("[data-clear]")) clearFilters(); });
+    const setOpen = (on) => {
+      $("ftoggle").setAttribute("aria-expanded", String(on)); $("fbody").hidden = !on;
+      store.set("lattice-filters-open", on ? "1" : "0");
+    };
+    $("ftoggle").addEventListener("click", () => setOpen($("ftoggle").getAttribute("aria-expanded") !== "true"));
+    setOpen(store.get("lattice-filters-open") !== "0" && window.innerWidth > 780);
+    renderList();
     document.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { state.filter = b.dataset.filter; renderList(); }));
     document.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => setH(b.dataset.h)));
     document.querySelectorAll("[data-p]").forEach((b) => b.addEventListener("click", () => {

@@ -140,7 +140,7 @@ def parse(items: list, keep: set) -> pd.DataFrame:
                          "teaser": _clean(it.get("summary"))[:600], "tickers": ",".join(tickers), "channels": "",
                          "url": it.get("url") or "", "source": str(it.get("source") or "").lower()})
     df = pd.DataFrame(rows, columns=["id", "created_utc", "title", "teaser", "tickers", "channels", "url", "source"])
-    df["created_utc"] = pd.to_datetime(df["created_utc"], utc=True, errors="coerce")
+    df["created_utc"] = pd.to_datetime(df["created_utc"], utc=True, errors="coerce", format="ISO8601")
     return df
 
 
@@ -201,7 +201,11 @@ def combine() -> pd.DataFrame:
     if not files:
         raise SystemExit("No Alpaca news downloaded yet. Run: python -m src.ingest.alpaca_news --start 2015-01")
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    df = df.drop_duplicates("id").dropna(subset=["created_utc"]).sort_values("created_utc")
+    df = df.drop_duplicates("id")
+    bad = int(df["created_utc"].isna().sum())
+    if bad:
+        print(f"{bad:,} articles have a publication time that could not be read; they are left out.")
+    df = df.dropna(subset=["created_utc"]).sort_values("created_utc")
     by = df["source"].replace("", "(not recorded)").value_counts()
     kept = df[df["source"].isin(KEEP_SOURCES)]
     out = path("clean") / "news_articles.parquet"
