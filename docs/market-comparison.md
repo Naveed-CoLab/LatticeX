@@ -12,6 +12,7 @@ What other AI stock tools and open research models say about their accuracy, how
 | Danelfin "Best Stocks" strategy | **+376%** vs +166% for the S&P 500, 3 Jan 2017 to 9 Jun 2025, after 0.15% trading costs | A 25-stock portfolio rebuilt from scores. The page states "Performance is based on backtested results" | Backtest |
 | Prospero.ai | **54% win rate** against the S&P 500 over about 5,000 picks | Share of picks that beat the index; period not stated | Self-reported |
 | AltIndex | **70% win rate**, average 22% gain over six-month windows | Share of picks that gained; no benchmark stated, so a rising market lifts it | Self-reported |
+| StockAnalysis (forecast pages) | No accuracy claim: shows sell-side analysts' 12-month price targets (data from S&P Global Market Intelligence) and the consensus rating | Nothing: the page shows no record of how past targets turned out | — |
 
 One 2026 review of these tools concluded: "there is no peer-reviewed evidence we're aware of that any retail AI stock picker consistently beats the market net of costs across a full market cycle." (That review is written by a company selling a portfolio-analysis product, so it is not neutral either.) For scale, the same review cites S&P's SPIVA scorecard: 65% of professional US large-cap funds trailed the S&P 500 in 2024, and 94% of US stock funds trailed their benchmark over 20 years.
 
@@ -74,6 +75,21 @@ Price ranges: the volatility range model now on the dashboard (v2 since 17 Nov),
 | "X% accurate predictions" | **No**: not a meaningful or provable claim |
 | Any return or profit claim | **No**: no trading strategy has been tested after costs |
 
+## 5b. One stock, three kinds of forecast (NVDA, 17–18 Nov 2026)
+
+Read on 18 Nov 2026. NVDA closed at $155.46 on 17 Nov.
+
+| | StockAnalysis | Danelfin | LatticeIQ |
+|---|---|---|---|
+| Who forecasts | 63 sell-side analysts (S&P Global data) | An ensemble of decision trees on about 10,000 features a day | Neural net (rank) and volatility range model (ranges) |
+| Output | 12-month targets: low $130, average $259 (+67%), median $250, high $450; consensus "Buy" | AI Score 1–10: chance of beating the market over 3 months; subscores; past buy/sell signals on the price chart | Rank and score 1–10 against the market for 5, 20 and 60 days; 50%, 80% and 90% price ranges; the target day's middle, high and low; past calls on the chart |
+| Uncertainty | Lowest and highest target only (−16% to +189%) | None stated per stock | Every range states how often it held, in the backtest and on 2025–26 data held back from development |
+| Track record | None shown | Backtest from 2017, described as such | 13-year walk-forward test; 2025–26 holdout with rules committed before the run; live log since 16 Nov 2026 |
+
+What this shows: the analysts' spread is far wider than LatticeIQ's ranges, and their single target has no stated record; research on target prices finds them optimistic on average. Danelfin's output is the same kind as LatticeIQ's rank (relative to the market) but reports large backtest averages over overlapping windows. LatticeIQ's numbers are smaller, but each one can be checked, including on data that was never used to build the model.
+
+What LatticeIQ adopted from them (18 Nov), without changing the model: a 1–10 score from the rank, shown with how often each score beat the S&P 500 in tests (47.6% for score 1 to 49.9% for score 10 at 20 days, 2012–2024); the model's past calls on each price chart, from the 2025–26 holdout and the live log, with the result of each; and the holdout hit rate next to every price range.
+
 ## 6. Where the product can stand out
 
 Not with a bigger backtest number, because anyone can print one. With things users can check:
@@ -88,6 +104,8 @@ A US launch also needs a legal review of every performance statement before it i
 
 ## Sources
 
+- StockAnalysis, NVIDIA stock forecast (read 18 Nov 2026): https://stockanalysis.com/stocks/nvda/forecast/
+- Danelfin, "How it works" (read 18 Nov 2026): https://danelfin.com/how-it-works
 - Danelfin, "Are AI Scores reliable?": https://support.danelfin.com/hc/en-us/articles/4404382344465-Are-AI-Scores-reliable-How-successful-were-AI-Scores-predictions-in-the-past
 - Danelfin, "Best Stocks Portfolio: +376% Return" (Nov 2025): https://blog.danelfin.com/?p=5049
 - Truthifi, "What Is an AI Stock Picker?" (updated Nov 2026; cites Prospero.ai, AltIndex and SPIVA figures): https://truthifi.com/education/ai-stock-picker

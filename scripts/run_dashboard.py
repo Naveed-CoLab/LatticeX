@@ -42,8 +42,10 @@ from src.config import ROOT, path
 APP = ROOT / "app"
 INDEX = APP / "data" / "index.json"
 FILINGS_EVERY_HOURS = 20
-TODAY_EVERY_MIN = 10            # all stocks' prices so far today, while the market is open
-ONE_EVERY_SEC = 20              # the stock on screen
+TODAY_EVERY_MIN = 10            # all stocks' prices so far today, while the market is open (Yahoo)
+ONE_EVERY_SEC = 20              # the stock on screen (Yahoo)
+IEX_ALL_SEC = 30                # with Alpaca keys: every stock from IEX in real time, every 30 seconds
+IEX_ONE_SEC = 2                 # and the stock on screen every 2 seconds
 
 # today's prices so far, filled by the background thread: {"fetched": ISO time, "quotes": {ticker: {...}}}
 TODAY = {"fetched": None, "quotes": {}, "live": False}
@@ -51,21 +53,58 @@ ONE = {}                        # ticker -> (time fetched, quote) for the stock 
 LOCK = threading.Lock()
 
 
+def iex() -> bool:
+    """True when Alpaca keys are set: today's prices come from IEX in real time instead of Yahoo."""
+    from src.ingest import alpaca_live
+    return alpaca_live.available()
+
+
+_CLOSES = {"key": None, "prev": {}}
+
+
+def last_closes() -> tuple:
+    """(last finished trading day, {ticker: its close}) from the daily price file; IEX's own previous close is
+    only IEX's last trade, so the change on the day is measured from the real close."""
+    from src.ingest import live
+    f = live.FILE
+    key = f.stat().st_mtime_ns if f.exists() else None
+    if key != _CLOSES["key"]:
+        px = live.load()
+        last = px.sort_values("date").groupby("ticker").tail(1) if px is not None and len(px) else None
+        _CLOSES.update(key=key, day=f"{last['date'].max():%Y-%m-%d}" if last is not None else "1900-01-01",
+                       prev=dict(zip(last["ticker"], last["close"])) if last is not None else {})
+    return _CLOSES["day"], _CLOSES["prev"]
+
+
+def fetch_quotes(tickers: list) -> dict:
+    """Today's prices so far: IEX real time with Alpaca keys, otherwise Yahoo (possibly delayed)."""
+    from src.ingest import live
+    if iex():
+        from src.ingest import alpaca_live
+        day, prev = last_closes()
+        q = alpaca_live.snapshots(list(tickers), prev, day)
+        if q:
+            return q
+    return live.quotes(list(tickers), workers=1 if len(tickers) == 1 else 4)
+
+
 def today_payload() -> dict:
     from src.ingest import live
+    real = iex()
     with LOCK:
         return {"state": live.market_state(), "fetched": TODAY["fetched"], "quotes": TODAY["quotes"],
-                "updates": TODAY["live"], "built": INDEX.stat().st_mtime_ns if INDEX.exists() else 0}
+                "updates": TODAY["live"], "built": INDEX.stat().st_mtime_ns if INDEX.exists() else 0,
+                "source": "iex" if real else "yahoo", "poll": IEX_ONE_SEC + 1 if real else ONE_EVERY_SEC}
 
 
 def one_quote(ticker: str) -> dict:
-    """Latest price for one stock, fetched at most once a minute. {} before the market opens."""
-    from src.ingest import live
+    """Latest price for one stock: every 2 seconds from IEX, or every 20 from Yahoo. {} before the market opens."""
+    every = IEX_ONE_SEC if iex() else ONE_EVERY_SEC
     with LOCK:
         hit = ONE.get(ticker)
-        if hit and time.time() - hit[0] < ONE_EVERY_SEC:
+        if hit and time.time() - hit[0] < every:
             return hit[1]
-    q = live.quotes([ticker], workers=1).get(ticker, {})
+    q = fetch_quotes([ticker]).get(ticker, {})
     with LOCK:
         ONE[ticker] = (time.time(), q)
         if q:
@@ -74,23 +113,27 @@ def one_quote(ticker: str) -> dict:
 
 
 def keep_current(tickers: list) -> None:
-    """Background loop. While the market is open: today's prices for every stock, every 10 minutes.
-    After the close: download the finished day once, rebuild the page data, and the page reloads itself."""
+    """Background loop. While the market is open: today's prices for every stock, every 30 seconds from IEX
+    (Alpaca keys) or every 10 minutes from Yahoo. After the close: download the finished day once, rebuild the page
+    data, and the page reloads itself."""
     from src.ingest import live
-    last_today, last_roll = 0.0, time.time()        # prices were just checked at start; look again in 30 minutes
+    last_today, last_roll, last_check = 0.0, time.time(), 0.0   # prices were just checked at start; look again in 30 minutes
     while True:
         try:
             st, now = live.market_state(), time.time()
             ny = pd.Timestamp.now(tz="America/New_York")
             session = st["open"] or (ny.dayofweek < 5 and (ny.hour, ny.minute) < (live.CLOSE_HOUR, live.CLOSE_MIN) and ny.hour >= 16)
-            if session and now - last_today > TODAY_EVERY_MIN * 60:
-                q = live.quotes(tickers)
+            if session and now - last_today > (IEX_ALL_SEC if iex() else TODAY_EVERY_MIN * 60):
+                q = fetch_quotes(tickers)
                 with LOCK:
                     TODAY["quotes"], TODAY["fetched"] = q, pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
                 last_today = now
-                if q:
-                    print(f"  {ny:%H:%M} New York: today's prices so far for {len(q)} tickers", flush=True)
-            have = live.status()
+                if q and (not iex() or ny.minute % 10 == 0 and ny.second < IEX_ALL_SEC):     # log every 10 minutes
+                    src = "IEX real-time" if any(x.get("src") == "iex" for x in q.values()) else "Yahoo"
+                    print(f"  {ny:%H:%M} New York: today's prices so far for {len(q)} tickers ({src})", flush=True)
+            have = None
+            if now - last_check > 300:                  # reading the price file is not free: every 5 minutes is enough
+                last_check, have = now, live.status()
             if have and have["day"] < live.last_close_day() and now - last_roll > 30 * 60:
                 last_roll = now
                 if live.update():
@@ -105,7 +148,7 @@ def keep_current(tickers: list) -> None:
                     print("  Forecasts rolled forward to the new closing day.", flush=True)
         except Exception as e:
             print(f"  Background update did not work ({e!r:.120}); trying again later.", flush=True)
-        time.sleep(60)
+        time.sleep(10 if iex() else 60)
 
 
 def authorized(header: str | None, password: str) -> bool:
@@ -235,7 +278,8 @@ def needs_build() -> bool:
         return True
     built = INDEX.stat().st_mtime
     inputs = [ROOT / "data" / "live" / "prices.parquet", ROOT / "data" / "live" / "rank.json", ROOT / "data" / "live" / "companies.json", path("clean") / "sec_events_latest.parquet",
-              ROOT / "scripts" / "export_dashboard.py", ROOT / "src" / "models" / "vol_ranges.py"]
+              ROOT / "scripts" / "export_dashboard.py", ROOT / "src" / "models" / "vol_ranges.py",
+              *(ROOT / "results").glob("*_HOLDOUT/predictions.parquet"), *(ROOT / "results").glob("*_ranges_HOLDOUT/summary.json")]
     return any(f.exists() and f.stat().st_mtime > built for f in inputs)
 
 

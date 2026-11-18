@@ -20,10 +20,20 @@ Start the dashboard once a day and it is current. Each start:
 
 While the dashboard is running and the US market is open (9:30 am to 4 pm New York, which is 7:30 pm to 2 am in Pakistan in winter), it also shows today's prices so far:
 
-- the stock you have open: refreshed every 20 seconds;
-- every stock, the market strip and the Overview page: refreshed every 10 minutes.
+| | With Alpaca keys in `.env` (IEX real time) | Without (Yahoo) |
+|---|---|---|
+| The stock you have open | every 2–3 seconds | every 20 seconds |
+| Every stock, the market strip, the Overview | every 30 seconds | every 10 minutes |
+| Delay | none: IEX's last trade | up to 15 minutes |
+| Market open or closed, holidays | Alpaca's market clock (knows holidays and early closes) | regular hours only |
 
-The big price becomes today's price, with the last close underneath. Before the market opens the page says when it opens in your local time and shows the last close, because no newer price exists yet. Prices come from Yahoo and can be delayed by up to 15 minutes; quotes to the second need a paid or broker feed.
+**IEX prices.** Alpaca's free market data gives real-time prices from one exchange, IEX, which handles a small share of US trading; its last price is usually within cents of the whole market's. The page says which source a price came from ("IEX real-time, 12:17:05" or "Yahoo, may be delayed up to 15 minutes"), measures the day's change from the real last close (not IEX's), and does not show IEX's volume as the day's volume. Check Alpaca's data terms before showing IEX prices to people outside the team. Code: `src/ingest/alpaca_live.py`; it stays under 150 requests a minute (the free plan allows 200) and falls back to Yahoo on any error.
+
+**Market open or closed** shows at the top right of every page, with the closing or opening time in your own time zone.
+
+**A big move today.** When the open stock has moved more than 3 times its usual day, or the S&P 500 has moved 2% or more, a red note under the forecast cards says so: the ranges were made at the last close and widen only after today's close, so until then the risk is higher than they show. In 2012–2024 tests, 5-day ranges made right after such days held about 77% (stock's own big move) and 76% (market-wide move) instead of 80%; after single-stock shocks of 4 times the usual day or more they held 87%, because the volatility inputs widen them at once.
+
+The big price becomes today's price, with the last close underneath. Before the market opens the page says when it opens in your local time and shows the last close, because no newer price exists yet.
 
 **The ranges follow the price.** Each range is made at the last close. While the market is open the page moves it to the price now and sizes it for the trading time left to the same end date (each side's distance from the price × √(days left ÷ days in the window)), so the three ranges, the target day's middle, high and low, the cone on the chart and the ladder update with every new price. The line under the three ranges shows what the range was at the close. The track record was measured on ranges made at the close; the live version is the same range re-centred, not a separately tested model.
 
@@ -45,6 +55,10 @@ Rank and range filters follow the look-ahead chosen at the top (5, 20 or 60 days
 
 On each stock page, **Against the market** (the model's rank for 5, 20 and 60 days and what that rank did in testing) sits right under the price, before the price ranges.
 
+## Screen sizes
+
+Laptops and tablets (under 1,100 px) get the top bar in two rows instead of squeezed buttons. When the stock list leaves the main area narrow, the three forecast cards stack, and the rank card puts its text under the three rows. Phones (under 780 px) get one column, with the stock list after the stock page. On phones the analyst chart drops its middle label and the target names so nothing overlaps.
+
 ## The chart
 
 - **Line or candles.** A line with a soft fill by default (green when the chosen period is up, red when it is down) or candles; the choice is remembered.
@@ -60,6 +74,12 @@ On each stock page, **Against the market** (the model's rank for 5, 20 and 60 da
 ## Rank against the market
 
 Once the model is trained for daily use (`python -m scripts.kaggle_cloud final-model`, see the main README), the dashboard ranks every stock with it after each close. Each stock page shows where the stock stands among all of them for 5, 20 and 60 trading days, with what that part of the ranking did in 13 years of tests. The stock list can be sorted by the model's rank, and the Overview lists the highest and lowest ranked. A rank is an order against the market, not a price, and the page says the ranking is better at flagging likely laggards than at picking winners. Until a model is saved, the panel says how to train it.
+
+**Score 1 to 10.** The rank in tenths (10 = ranked highest), shown in the rank card and the stock list. Next to it, ten small bars show how often stocks with each score beat the S&P 500 in the 2012–2024 tests, with the stock's own score highlighted and a line at 50%. At 20 days that runs from 47.6% for score 1 to 49.9% for score 10, so the page says it is an edge across many stocks, not a sure call on one. Built by `scripts/rank_scores.py` from the walk-forward predictions (`results/*/rank_scores_h*.csv`, committed).
+
+**The model's past calls on the chart.** Small green ▲ (ranked in the top fifth) and red ▼ (bottom fifth) marks on the price line, for the chosen look-ahead, weekly. They come from the one-time 2025–26 holdout test (a model trained on data to 2024) and from the daily forecast log since the model went live, so every call was made before its outcome. Pointing at a marked day shows the call and what happened next against the S&P 500; the key under the chart counts how many went the way called, and can hide the marks (remembered).
+
+**Confidence on the ranges.** Each forecast card shows how often that range held on 2025–26 data never used to build it (from `results/*_ranges_HOLDOUT/summary.json`), and the Track record page has the full holdout table.
 
 ## What analysts expect
 

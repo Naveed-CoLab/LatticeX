@@ -260,7 +260,7 @@ Tested and rejected:
 
 Both bounds are close to the 90% they aim for, so they can be shown. They are wider than the close range because a day's high and low reach beyond its close.
 
-**Now in the product (17 Nov).** The candidate is `src/models/vol_ranges.py` v2. Replayed in the product code on stocks only (the same 306,000 forecasts per horizon as v1), with v1 scored on the same rows:
+**Now in the product (17 Nov).** The candidate is `src/models/vol_ranges.py` v2. Replayed in the product code on stocks only (the same 306,000 forecasts per horizon as v1), with v1 scored on the same rows. *Correction, 18 Nov:* this table was computed with an older copy of the SEC filings file (12 Nov) that held fewer earnings dates. With the full file, as the product uses it (Track record page), v2's 80% range held **79.3% / 79.0% / 79.1%** with average width **9.1% / 18.5% / 32.0%**; the conclusions do not change.
 
 | 80% range, 2012–2024 | 5 days | 20 days | 60 days |
 |---|---|---|---|
@@ -329,7 +329,7 @@ Range model v2 as in the product, fitted on windows that ended by 31 Dec 2024, s
 
 80% range held by quarter (v2): 5 days 70–84%, 20 days 68–89%, 60 days 70–86%. The weakest quarters were 2025 Q4 and 2026 Q1; the partial last quarter (2026 Q4, 619 forecasts at 20 days) held 50%.
 
-**Reading.** v2 passes every pre-set band, and its 2025–26 hit rates are close to its 2012–2024 replay (79.2% / 78.8% / 79.1%). Two honest points. First, v1 was better calibrated on the holdout (about 80% at every horizon) while v2 was 1.0 / 1.8 / 2.6 points under target, in exchange for ranges 3.2% / 5.2% / 7.7% narrower. Second, the main source of v2's shortfall is its upward tilt: it centres the range on the drift of 2001–2024, and in 2025–26 the close ended above the middle only 44.6% of the time at 60 days. By the lock's rules nothing is changed on the basis of this; it is recorded as the first thing to look at in a later version.
+**Reading.** v2 passes every pre-set band, and its 2025–26 hit rates are close to its 2012–2024 replay (79.2% / 78.8% / 79.1%). Two honest points. First, v1 was better calibrated on the holdout (about 80% at every horizon) while v2 held 1.1 / 1.9 / 2.2 points under 80% (1.0 / 1.8 / 2.6 below v1), in exchange for ranges 3.1% / 5.3% / 7.7% narrower. Second, the main source of v2's shortfall is its upward tilt: it centres the range on the drift of 2001–2024, and in 2025–26 the close ended above the middle only 44.6% of the time at 60 days. By the lock's rules nothing is changed on the basis of this; it is recorded as the first thing to look at in a later version.
 
 ### 8b. Ranking — running
 

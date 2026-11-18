@@ -129,6 +129,81 @@ def ranking_record() -> dict:
                        "positive_years": int((y["mlp"] > 0).sum()), "years": int(len(y)),
                        "top20_beat": round(float(g.loc["top 20%", "share_beating_spy"]), 4),
                        "bottom20_beat": round(float(g.loc["bottom 20%", "share_beating_spy"]), 4)}
+        sc = d[-1] / f"rank_scores_h{h}.csv"          # how each 1-10 score did (scripts/rank_scores.py)
+        if sc.exists():
+            t = pd.read_csv(sc)
+            out[str(h)]["scores"] = [{"score": int(r.score), "beat": round(float(r.beat_spy), 4),
+                                      "excess": round(float(r.mean_excess), 5)} for r in t.itertuples()]
+            out[str(h)]["score_years"] = [str(t["first"].iloc[0])[:4], str(t["last"].iloc[0])[:4]]
+    return out
+
+
+def past_calls(px: pd.DataFrame, spy: pd.DataFrame, since: pd.Timestamp) -> dict:
+    """The model's past calls for each stock, for the chart: {ticker: {h: [[date, 'top'|'bottom', score, result]]}}.
+    A call = the stock was ranked in the top or bottom fifth for that look-ahead. Result = its return minus SPY's
+    over the window, or None while the window is still open. Two sources, both made before the outcome was known:
+      * the one-time 2025-26 holdout test (model trained on data to 2024): results/*_h<h>_fund_sect_HOLDOUT
+      * the daily forecast log written after each close since the model went live: data/live/forecasts/*.csv
+    Weekly (every 5th trading day) like the backtest, from `since` on."""
+    from scripts.rank_scores import score_of
+    rows = []
+    for h in vr.HORIZONS:
+        runs = sorted((ROOT / "results").glob(f"*_real_stock_h{h}_fund_sect_HOLDOUT"))
+        if runs and (runs[-1] / "predictions.parquet").exists():
+            p = pd.read_parquet(runs[-1] / "predictions.parquet", columns=["date", "ticker", "model", "y_raw", "y_true"])
+            p = p[p["model"] == "mlp"].copy()
+            p["pct"] = p.groupby("date")["y_raw"].rank(pct=True)
+            p["result"] = np.expm1(p["y_true"])
+            rows.append(p.assign(h=h)[["date", "ticker", "h", "pct", "result"]])
+    log_dir = ROOT / "data" / "live" / "forecasts"
+    logs = sorted(log_dir.glob("*.csv")) if log_dir.exists() else []
+    if logs:
+        lg = pd.concat([pd.read_csv(f, usecols=["asof", "ticker", "horizon", "pct"]) for f in logs], ignore_index=True)
+        lg = lg.rename(columns={"asof": "date", "horizon": "h"})
+        lg["date"] = pd.to_datetime(lg["date"])
+        last_holdout = max((r["date"].max() for r in rows), default=pd.Timestamp("1900-01-01"))
+        lg = lg[lg["date"] > last_holdout]
+        days = sorted(lg["date"].unique())
+        lg = lg[lg["date"].isin(days[::5])]                      # weekly, like the backtest
+        # result from the daily prices: the stock's log return minus SPY's over the next h trading days
+        cal = pd.DatetimeIndex(sorted(spy["date"].unique()))
+        sp = spy.set_index("date")["adj_close"]
+        wide = px.pivot_table(index="date", columns="ticker", values="adj_close")
+        res = []
+        for d, h, t in zip(lg["date"], lg["h"], lg["ticker"]):
+            i = cal.searchsorted(d)
+            if i + h >= len(cal) or t not in wide or d not in wide.index:
+                res.append(np.nan)
+                continue
+            e = cal[i + h]
+            a, b = wide.at[d, t], wide.at[e, t] if e in wide.index else np.nan
+            res.append(float(np.expm1(np.log(b / a) - np.log(sp[e] / sp[d]))) if a > 0 and b > 0 else np.nan)
+        lg["result"] = res
+        rows.append(lg[["date", "ticker", "h", "pct", "result"]])
+    if not rows:
+        return {}
+    c = pd.concat(rows, ignore_index=True)
+    c = c[(c["date"] >= since) & ((c["pct"] >= 0.8) | (c["pct"] <= 0.2))]
+    c["score"] = score_of(c["pct"])
+    out = {}
+    for (t, h), g in c.sort_values("date").groupby(["ticker", "h"]):
+        out.setdefault(t, {})[str(h)] = [[f"{d:%Y-%m-%d}", "top" if p >= 0.8 else "bottom", int(s),
+                                           None if pd.isna(r) else round(float(r), 4)]
+                                          for d, p, s, r in zip(g["date"], g["pct"], g["score"], g["result"])]
+    return out
+
+
+def holdout_record() -> dict:
+    """The one-time 2025-26 holdout results (docs/holdout-lock.md), if they have been run: shown as the
+    'never seen during development' figures next to the backtest."""
+    out = {}
+    runs = sorted((ROOT / "results").glob("*_ranges_HOLDOUT"))
+    if runs and (runs[-1] / "summary.json").exists():
+        s = json.loads((runs[-1] / "summary.json").read_text(encoding="utf-8"))
+        out["ranges"] = {h: {"forecasts": v["forecasts"], "first": v["first"], "last": v["last"],
+                             "held": {lv: round(x["held"], 4) for lv, x in v["v2"].items()},
+                             "day_high": round(v["day"]["high_held"], 4), "day_low": round(v["day"]["low_held"], 4)}
+                         for h, v in s["horizons"].items()}
     return out
 
 
@@ -320,7 +395,8 @@ def main() -> None:
     if rank:
         print(f"Model ranks for {rank['n']} stocks (model trained on data to {rank['model']['trained_through']})")
     track = {"asof": f"{asof:%Y-%m-%d}", "calibrated_to": f"{CALIB_END:%Y-%m-%d}", "ranges": ranges,
-             "ranking": ranking_record(), "model": {**rank["model"], "n": rank["n"]} if rank else None}
+             "ranking": ranking_record(), "holdout": holdout_record(),
+             "model": {**rank["model"], "n": rank["n"]} if rank else None}
     (out / "track.json").write_text(json.dumps(track), encoding="utf-8")
 
     print("Looking up company names", flush=True)
@@ -337,6 +413,10 @@ def main() -> None:
         words = describe
 
     index = []
+    calls = past_calls(px, stock_rows(funds, ["SPY"]), asof - pd.to_timedelta(a.candles * 7 // 5 + 7, unit="D"))
+    if calls:
+        print(f"Past calls of the model on the charts: {sum(len(v) for x in calls.values() for v in x.values()):,} "
+              f"(2025-26 holdout test and the daily log)")
     print(f"Writing {len(live)} stock files", flush=True)
     for n, t in enumerate(live, 1):
         if n % 100 == 0:
@@ -398,7 +478,7 @@ def main() -> None:
                  "earnings": {"next": f"{show:%Y-%m-%d}" if show is not None else None,
                               "reported": f"{reported:%Y-%m-%d}" if reported is not None else None,
                               "history": hist, "typical": typical},
-                 "filings": filings, "sector": info.get(t, {}).get("sector"),
+                 "filings": filings, "sector": info.get(t, {}).get("sector"), "calls": calls.get(t),
                  "industry": info.get(t, {}).get("industry"),
                  "rank": ({h: {"pos": v[0], "pct": v[1], "exp": v[2]} for h, v in rank["stocks"][t].items()}
                           if rank and t in rank["stocks"] else None)}

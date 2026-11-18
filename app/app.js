@@ -6,7 +6,7 @@
   const cfg = window.LATTICE || {};
   const domains = window.LATTICE_DOMAINS || {};
   const LWC = window.LightweightCharts;
-  const state = { index: null, track: null, sel: null, h: "20", view: "overview", sort: "az", filter: "all", f: { sec: "", move: "", rank: "", range: "" }, period: "3M", stock: null, stars: new Set(), hit: 0, today: { quotes: {}, state: null, fetched: null }, ctype: "line", vol: true, allRanges: false };
+  const state = { index: null, track: null, sel: null, h: "20", view: "overview", sort: "az", filter: "all", f: { sec: "", move: "", rank: "", range: "" }, period: "3M", stock: null, stars: new Set(), hit: 0, today: { quotes: {}, state: null, fetched: null }, ctype: "line", vol: true, allRanges: false, calls: true };
   const cache = new Map();
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const PERIOD = { "1W": 5, "1M": 22, "3M": 66, "6M": 132, "1Y": 252 };
@@ -34,6 +34,7 @@
   // ---------- small helpers ----------
   const money = (v) => "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const scoreOf = (p) => Math.min(10, Math.max(1, Math.ceil(p * 10)));      // rank as a fraction (1 = highest) -> 1..10
   const span = (b, at) => `${signed(b[0] / at - 1, 1)} / ${signed(b[1] / at - 1, 1)}`;     // a range as down / up from a price
   const signed = (v, d = 2) => (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(d) + "%";
   const pill = (v, d = 2) => `<span class="pill ${v >= 0 ? "up" : "down"}">${signed(v, d)}</span>`;
@@ -278,6 +279,9 @@
       const c = s.candles[i], prev = i ? s.candles[i - 1][4] : null;
       html = `<b>${day(c[0], true)} ${c[0].slice(0, 4)}</b><span class="big">${money(c[4])}</span>${prev ? pill(c[4] / prev - 1) : ""}` +
         (state.ctype === "candles" ? `<span class="sub">open ${c[1].toFixed(2)}, high ${c[2].toFixed(2)}, low ${c[3].toFixed(2)}</span>` : "");
+      const call = state.calls && s.calls && (s.calls[state.h] || []).find((x) => x[0] === c[0]);
+      if (call) html += `<span class="sub call ${call[1]}">Model's call: ${call[1]} fifth for ${state.h} days (score ${call[2]})<br>` +
+        (call[3] === null ? `result due in ${state.h} trading days` : `then ${signed(call[3], 1)} against the S&P 500, ${(call[3] > 0) === (call[1] === "top") ? "as called" : "against the call"}`) + `</span>`;
     } else if (q && p.time === q.date) {
       html = `<b>Today so far</b><span class="big">${money(q.last)}</span>${pill(q.last / q.prev - 1)}` +
         (state.ctype === "candles" ? `<span class="sub">open ${q.open.toFixed(2)}, high ${q.high.toFixed(2)}, low ${q.low.toFixed(2)}</span>` : "");
@@ -328,6 +332,13 @@
     for (const e of s.earnings.history) {                    // the first trading day on or after each report
       const c = s.candles.find((x) => x[0] >= e.date);
       if (c && c[0] !== hi[0] && c[0] !== lo[0]) m.push({ time: c[0], position: "belowBar", color: k.amber, shape: "circle", text: "E", size: 0.7 });
+    }
+    const C = state.calls && s.calls && s.calls[state.h];
+    if (C) {
+      const from = part[0][0], have = new Set(part.map((c) => c[0]));
+      for (const [d, side] of C) if (d >= from && have.has(d))
+        m.push(side === "top" ? { time: d, position: "belowBar", color: k.up, shape: "arrowUp", size: 0.55 }
+                              : { time: d, position: "aboveBar", color: k.down, shape: "arrowDown", size: 0.55 });
     }
     m.sort((a, b) => a.time.localeCompare(b.time));
     const line = state.ctype !== "candles";                  // marks sit on whichever series is showing
@@ -419,7 +430,7 @@
     const h = state.h;
     if ((state.sort === "rank" || state.sort === "rankl" || state.f.rank) && s.rk) {
       const p = s.rk[h];
-      return `Ranked ${p >= 0.5 ? "top" : "bottom"} ${Math.max(1, Math.round((p >= 0.5 ? 1 - p : p) * 100))}%`;
+      return `Score ${scoreOf(p)}/10 · ranked ${p >= 0.5 ? "top" : "bottom"} ${Math.max(1, Math.round((p >= 0.5 ? 1 - p : p) * 100))}%`;
     }
     if (state.sort === "narrow" || state.sort === "wide" || state.f.range) return `Range ±${pct(s.w[h])} in ${h} days`;
     if ((state.sort === "earn" || state.filter === "earn") && s.next_earn) return `Earnings around ${day(s.next_earn)}`;
@@ -495,12 +506,14 @@
     const s = state.stock, h = state.h, r = rangeNow(s, h), q = quote(s.t), st = state.today.state, b = r.bands["80"];
     $("price").textContent = money(q ? q.last : s.price);
     $("chg").innerHTML = q ? `${pill(q.last / q.prev - 1)}<span>today so far, ${day(q.date, true)}</span>` : `${pill(s.chg)}<span>close on ${day(s.asof, true)}</span>`;
-    $("pxnote").textContent = q ? `Last close ${money(s.price)} on ${day(s.asof, true)}`
+    $("pxnote").textContent = q ? `Last close ${money(s.price)} on ${day(s.asof, true)} · ` + (q.src === "iex"
+        ? `IEX real-time${q.time ? ", " + new Date(q.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) : ""}`
+        : "Yahoo, may be delayed up to 15 minutes")
       : st ? (st.open ? "Market open: today's price is loading" : `Market closed, opens ${whenLocal(st.next_open)}`) : "";
     $("fc").innerHTML = Object.keys(s.ranges).map((hh) => { const x = rangeNow(s, hh), v = x.bands["80"];
       return `<button type="button" data-fc="${hh}" aria-pressed="${hh === h}"><span class="when"><b>${day(x.end, true)}</b><span>${x.live ? `${x.steps + 1} trading days left` : `in ${hh} trading days`}</span></span>
         <span class="rng"><span>${money(v[0])}</span><i>to</i><span>${money(v[1])}</span></span>
-        <span class="how">${x.earn ? '<i class="e" title="Earnings report in this window"></i>' : ""}${span(v, x.anchor)}, right 4 times in 5</span></button>`; }).join("");
+        <span class="how">${x.earn ? '<i class="e" title="Earnings report in this window"></i>' : ""}${span(v, x.anchor)}, right 4 times in 5</span>${proof(hh)}</button>`; }).join("");
     $("fcnote").innerHTML = r.live
       ? `<i class="livedot"></i>Following today's price: centred on ${money(q.last)} and sized for the time left to each date. At the close of ${day(s.asof, true)} the ${h}-day range was ${money(r.made.bands["80"][0])} to ${money(r.made.bands["80"][1])}.`
       : `Measured from the close of ${day(s.asof, true)}, ${money(s.price)}. While the market is open the ranges follow the price.`;
@@ -519,7 +532,22 @@
       ? `A narrower range is right less often; pick the one that matches how sure you need to be. <button type="button" class="link" data-ranges>Show one range</button>`
       : `Need to be more sure, or want a tighter range? <button type="button" class="link" data-ranges>Show the 50% and 90% ranges</button>`);
     renderDay(r);
+    renderBigMove(s, q);
     renderLegend();
+  }
+  // a move today well beyond the stock's usual day, or a big day for the whole market: the ranges were made at the
+  // last close and widen only after today's close (tested: after such days 5-day ranges held about 76-77%, not 80%)
+  function renderBigMove(s, q) {
+    const el = $("bigmove"), spy = quote("SPY");
+    const mv = q ? Math.log(q.last / q.prev) : 0, times = s.vol > 0 ? Math.abs(mv) / s.vol : 0;
+    const mkt = spy ? spy.last / spy.prev - 1 : 0;
+    const big = times >= 3, market = Math.abs(mkt) >= 0.02;
+    el.hidden = !(q && (big || market));
+    if (el.hidden) return;
+    el.innerHTML = (big ? `<strong>${s.t} has moved ${signed(q.last / q.prev - 1, 1)} today</strong>, about ${times.toFixed(1)} times its usual day. ` : "") +
+      (market ? `<strong>The S&amp;P 500 is ${signed(mkt, 1)} today.</strong> ` : "") +
+      `The ranges above were made at the last close and widen only after today's close, so until then the risk is higher than they show. ` +
+      `In 2012–2024 tests, 5-day ranges made right after such days held about ${big ? "77%" : "76%"} of the time instead of 80%.`;
   }
   function renderDay(r) {
     const d = r.day, box = $("dayside");
@@ -537,12 +565,26 @@
     $("day-note").innerHTML = `The day's high and low reach beyond its close, so these sit outside the closing range.` +
       (D ? ` Replayed on 2012 to 2024: the high stayed below ${pct(D.high_held)} of the time and the low above ${pct(D.low_held)}.` : "");
   }
+  // how often this kind of range held on 2025-26, data never used to build or tune it (the locked holdout test)
+  function proof(hh) {
+    const H = ((state.track.holdout || {}).ranges || {})[hh];
+    return H ? `<span class="proof" title="Range model fitted on data to 2024, then scored on ${H.forecasts.toLocaleString("en-US")} forecasts from ${day(H.first)} ${H.first.slice(0, 4)} to ${day(H.last)} ${H.last.slice(0, 4)}">Held ${pct(H.held["80"], 0)} on unseen 2025–26 data</span>` : "";
+  }
+  // the model's past top- and bottom-fifth calls for this stock (2025-26 holdout test and the live log), with the record
+  function callsKey() {
+    const s = state.stock, C = s && s.calls && s.calls[state.h];
+    if (!C || !C.length) return "";
+    const done = C.filter((x) => x[3] !== null), right = done.filter((x) => (x[3] > 0) === (x[1] === "top")).length;
+    return `<button type="button" class="link calls" data-calls aria-pressed="${state.calls}"><i class="sw cu">▲</i><i class="sw cd">▼</i>Model's past calls${state.calls ? "" : " (hidden)"}</button>` +
+      (state.calls && done.length ? `<span class="callrec" title="Weekly calls from the 2025–26 test (model trained on data to 2024) and the live log since it went online; each was made before the outcome was known">${right} of ${done.length} past calls went the way called</span>` : "");
+  }
   // the key under the chart: one range by default, all three on request (the same switch as in the side panel)
   function renderLegend() {
     $("legend").innerHTML = (state.allRanges
       ? `<span><i class="sw l50"></i>Likely half the time</span><span><i class="sw l80"></i>4 times in 5</span><span><i class="sw l90"></i>9 times in 10</span>`
       : `<span><i class="sw l1"></i>Likely range, right 4 times in 5</span>`) + `<span><i class="sw mid"></i>Likely middle</span>` +
       `<span><i class="sw ex"></i>Earnings expected</span><span><i class="sw ep">E</i>Past earnings report</span>` +
+      callsKey() +
       `<button type="button" class="link more" data-ranges>${state.allRanges ? "Show one range" : "Show 50% and 90% ranges"}</button>`;
   }
   // where the trained model ranks this stock among all of them, for each look-ahead
@@ -553,13 +595,19 @@
       box.innerHTML = `<p class="fine">The ranking model is not saved for daily use yet. Train it once with <b>python -m scripts.kaggle_cloud final-model</b>; after that every stock is ranked here after each close.</p>`;
       return;
     }
-    const x = R[h], K = (state.track.ranking || {})[h];
+    const x = R[h], K = (state.track.ranking || {})[h], sc = scoreOf(x.pct);
     const group = x.pct >= 0.8 ? "top fifth" : x.pct <= 0.2 ? "bottom fifth" : "middle";
-    box.innerHTML = Object.keys(R).map((hh) => `<button type="button" class="rk" data-fc="${hh}" aria-pressed="${hh === h}">
-        <span>${hh} days</span><span class="line"><b style="left:${(R[hh].pct * 100).toFixed(1)}%"></b></span><span>${ordinal(R[hh].pos)} of ${M.n}</span></button>`).join("") +
-      `<div class="rk-ends"><span>ranked lowest</span><span>ranked highest</span></div>
-      <p class="rk-say">For the next ${h} trading days the model ranks ${s.t} <strong>${ordinal(x.pos)} of ${M.n}</strong>, in the <strong>${group}</strong>.` +
-      (K ? ` In 13 years of tests, the bottom fifth beat the S&P 500 ${pct(K.bottom20_beat)} of the time and the top fifth ${pct(K.top20_beat)}: the ranking is better at flagging likely laggards than at picking winners.` : "") + `</p>
+    const S = K && K.scores, mine = S && S.find((r) => r.score === sc);
+    box.innerHTML = `<div class="rk-list">` + Object.keys(R).map((hh) => `<button type="button" class="rk" data-fc="${hh}" aria-pressed="${hh === h}">
+        <span>${hh} days</span><span class="line"><b style="left:${(R[hh].pct * 100).toFixed(1)}%"></b></span><span class="rk-pos"><b class="sc">${scoreOf(R[hh].pct)}</b><small>/10</small> · ${ordinal(R[hh].pos)}</span></button>`).join("") +
+      `<div class="rk-ends"><span>ranked lowest</span><span>ranked highest</span></div></div>
+      <div class="rk-say"><p>For the next ${h} trading days the model gives ${s.t} <strong>score ${sc} of 10</strong> (${ordinal(x.pos)} of ${M.n}, ${group}).` +
+      (mine ? ` In ${K.score_years[0]}–${K.score_years[1]} tests, score-${sc} stocks beat the S&P 500 <strong>${pct(mine.beat)}</strong> of the time.` : "") + `</p>` +
+      (S ? `<div class="scorebars" role="img" aria-label="Share of stocks with each score that beat the S&P 500 in tests">${S.map((r) => {
+          const hgt = Math.max(4, Math.min(100, (r.beat - 0.45) / 0.07 * 100));
+          return `<span class="${r.score === sc ? "on" : ""}" title="Score ${r.score}: beat the S&P 500 ${pct(r.beat)} of the time"><i style="height:${hgt.toFixed(0)}%"></i><em>${r.score}</em></span>`; }).join("")}
+          <b class="even" style="bottom:calc(16px + (100% - 16px) * ${((0.5 - 0.45) / 0.07).toFixed(3)})" title="50%: a coin flip"></b></div>
+        <p class="fine">Share that beat the S&P 500 over ${h} days, by score; the line is 50%. Higher scores did a little better, ${pct(S[0].beat)} for score 1 against ${pct(S[S.length - 1].beat)} for score 10: an edge across many stocks, not a sure call on one. The bottom fifth beat it ${pct(K.bottom20_beat)} of the time and the top fifth ${pct(K.top20_beat)}: the ranking is better at flagging likely laggards than at picking winners.</p>` : "") + `</div>
       <p class="fine">A rank is the model's order of all stocks against the market, not a price. Model trained on data to ${day(M.trained_through)} ${M.trained_through.slice(0, 4)}; ranked after the close of ${day(s.asof, true)}. How the ranking did in 13 years of tests: <button type="button" class="link" data-view="record">Track record</button>.</p>`;
   }
   function renderStock(animate, data) {
@@ -662,7 +710,7 @@
     if (T) {
       // one year of closes on the left half, the next twelve months on the right half: the same time scale
       const hist = s.candles.slice(-252).map((c) => c[4]).concat(q ? [q.last] : []);
-      const W = Math.max(300, $("an-chart").clientWidth), H = 250, x0 = 4, x1 = W - 158, xm = x0 + (x1 - x0) / 2, top = 16, bot = 30;   // drawn at real size: 1 unit = 1 pixel
+      const W = Math.max(300, $("an-chart").clientWidth), narrow = W < 480, H = 250, x0 = 4, x1 = W - (narrow ? 112 : 158), xm = x0 + (x1 - x0) / 2, top = 16, bot = 30;   // drawn at real size: 1 unit = 1 pixel
       let lo = Math.min(...hist, T.low, now), hi = Math.max(...hist, T.high, now);
       const padY = (hi - lo) * 0.07 || 1; lo -= padY; hi += padY;
       const y = (v) => top + (hi - v) / (hi - lo) * (H - top - bot), x = (i) => x0 + i / (hist.length - 1) * (xm - x0);
@@ -683,9 +731,9 @@
         ${r60 ? `<line x1="${xb.toFixed(1)}" x2="${xb.toFixed(1)}" y1="${y(r60.bands["80"][1]).toFixed(1)}" y2="${y(r60.bands["80"][0]).toFixed(1)}" stroke="var(--cone)" stroke-width="5" stroke-linecap="round"/>` : ""}
         <circle cx="${xm}" cy="${y(now).toFixed(1)}" r="4.5" fill="var(--ink)" stroke="var(--sheet)" stroke-width="2"/>
         ${[T.high, T.mean, T.low].map((v) => `<circle cx="${x1}" cy="${y(v).toFixed(1)}" r="3.5" fill="var(--cone)"/>`).join("")}
-        ${ends.map((e) => `<text x="${x1 + 10}" y="${(e.y + 4).toFixed(1)}">${e.n} <tspan class="v">${money(e.v)}</tspan> ${chg(e.v)}</text>`).join("")}
+        ${ends.map((e) => `<text x="${x1 + 10}" y="${(e.y + 4).toFixed(1)}">${narrow ? "" : e.n + " "}<tspan class="v">${money(e.v)}</tspan> ${chg(e.v)}</text>`).join("")}
         <text x="${x0}" y="${H - 8}">${date(s.candles[Math.max(0, s.candles.length - 252)][0]).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</text>
-        <text x="${xm}" y="${H - 8}" text-anchor="middle">${q ? "Now" : "Last close"} <tspan class="v">${money(now)}</tspan></text>
+        ${narrow ? "" : `<text x="${xm}" y="${H - 8}" text-anchor="middle">${q ? "Now" : "Last close"} <tspan class="v">${money(now)}</tspan></text>`}
         <text x="${x1}" y="${H - 8}" text-anchor="end">${end.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</text>
       </svg>`;
     }
@@ -783,6 +831,20 @@
       <div class="scroll"><table><thead><tr><th>Look ahead</th><th>Direction right<br>against the market</th><th>Years with a<br>positive score</th><th>Top fifth beat<br>the S&amp;P 500</th><th>Bottom fifth beat<br>the S&amp;P 500</th></tr></thead><tbody>
       ${Object.keys(K).map((hh) => `<tr><td>${hh} trading days<small>${K[hh].forecasts.toLocaleString("en-US")} forecasts</small></td><td>${pct(K[hh].hit_rate)}<small>a coin flip is 50%</small></td>
         <td>${K[hh].positive_years} of ${K[hh].years}</td><td>${pct(K[hh].top20_beat)}</td><td>${pct(K[hh].bottom20_beat)}</td></tr>`).join("")}
+      </tbody></table></div>
+      ${K[h] && K[h].scores ? `<h3 class="sub">Scores 1 to 10, ${h} trading days (${K[h].score_years[0]}–${K[h].score_years[1]})</h3>
+      <p>Each stock's score is its rank in tenths. How often stocks with each score beat the S&P 500, and their average result against it:</p>
+      <div class="scroll"><table><thead><tr><th>Score</th>${K[h].scores.map((r) => `<th>${r.score}</th>`).join("")}</tr></thead><tbody>
+        <tr><td>Beat the S&amp;P 500</td>${K[h].scores.map((r) => `<td>${pct(r.beat)}</td>`).join("")}</tr>
+        <tr><td>Average against it</td>${K[h].scores.map((r) => `<td>${signed(r.excess, 2)}</td>`).join("")}</tr>
+      </tbody></table></div>` : ""}` : "";
+    const HO = (t.holdout || {}).ranges;
+    const unseen = HO ? `<h2>On data never used to build them: 2025–26</h2>
+      <p>The ranges were fitted on data up to the end of 2024, and the rules for this test were published before it was run. Then every forecast from January 2025 was scored once.</p>
+      <div class="scroll"><table><thead><tr><th>Look ahead</th><th>“Half the time”</th><th>“4 times in 5”</th><th>“9 times in 10”</th><th>Day's high · low</th></tr></thead><tbody>
+      ${Object.keys(HO).map((hh) => `<tr><td>${hh} trading days<small>${HO[hh].forecasts.toLocaleString("en-US")} forecasts</small></td>
+        ${["50", "80", "90"].map((lv) => `<td>${pct(HO[hh].held[lv])}<small>aimed for ${lv}%</small></td>`).join("")}
+        <td>${pct(HO[hh].day_high)} · ${pct(HO[hh].day_low)}<small>aimed for 90%</small></td></tr>`).join("")}
       </tbody></table></div>` : "";
     $("record").innerHTML = `<div>
       <h1>How often were the ranges right?</h1>
@@ -791,6 +853,7 @@
       <p>If a range says “4 times in 5”, the price should land inside it about 80% of the time. This is what happened.</p>
       <div class="scroll"><table><thead><tr><th>Look ahead</th><th>“Half the time”</th><th>“4 times in 5”</th><th>“9 times in 10”</th><th>“4 times in 5” in<br>earnings weeks</th><th>Typical width<br>(4 times in 5)</th></tr></thead>
       <tbody>${Object.keys(R).map(row).join("")}</tbody></table></div>
+      ${unseen}
       ${R[h].day ? `<h2>The day itself</h2>
       <p>Each stock page also says how high and how low the price may trade on the last day of the window. Each bound aims to hold 9 times in 10.</p>
       <div class="scroll"><table><thead><tr><th>Look ahead</th><th>High stayed below</th><th>Low stayed above</th><th>Both held</th><th>Typical bounds</th></tr></thead><tbody>
@@ -844,7 +907,20 @@
   function open(t) { closeHits(); $("q").value = ""; $("q").blur(); setView("stocks"); select(t, true); }
 
   // ---------- keeping today's prices fresh ----------
+  // the header: is the US market open, and until or from when, in the visitor's own time
+  function renderMarket() {
+    const st = state.today.state, el = $("mkt");
+    if (!st) { el.hidden = true; return; }
+    el.hidden = false;
+    el.className = "mkt " + (st.open ? "open" : "shut");
+    el.innerHTML = st.open
+      ? `<i></i>Market open<span> · closes ${clock(st.closes)}</span>`
+      : `<i></i>Market closed<span>${st.next_open ? " · opens " + whenLocal(st.next_open).replace(" at ", " ") : ""}</span>`;
+    el.title = (st.open ? "US stock market open now" : "US stock market closed") + " (New York time " + st.ny_time + ")" +
+      (state.today.source === "iex" ? ". Prices: IEX exchange, real time." : ". Prices: Yahoo, may be delayed up to 15 minutes.");
+  }
   function refreshLive() {
+    renderMarket();
     renderTape();
     renderList();
     if (state.view === "overview") renderOverview();
@@ -860,7 +936,7 @@
       state.built = state.built || j.built;
       const was = state.today, changed = j.fetched !== was.fetched || !was.state || j.state.open !== was.state.open || j.state.next_open !== was.state.next_open;
       const mine = state.sel && was.quotes[state.sel];
-      state.today = { quotes: j.quotes || {}, state: j.state, fetched: j.fetched };
+      state.today = { quotes: j.quotes || {}, state: j.state, fetched: j.fetched, source: j.source || "yahoo", poll: j.poll || 20 };
       if (mine && (!j.quotes[state.sel] || j.quotes[state.sel].date === mine.date)) state.today.quotes[state.sel] = mine;   // keep the fresher one
       if (changed) refreshLive();
     } catch (e) { /* opened without the local server: closing prices only */ }
@@ -952,10 +1028,16 @@
     else { state.sel = null; setView("stocks"); select(a, true); }
 
     state.allRanges = store.get("lattice-ranges") === "all";
+    state.calls = store.get("lattice-calls") !== "off";
     document.addEventListener("click", (e) => {
       if (e.target.closest("[data-ranges]")) {
         state.allRanges = !state.allRanges; store.set("lattice-ranges", state.allRanges ? "all" : "one");
         if (state.stock) { cone.set(coneData(), false); renderLive(); setRange(); } else renderLegend();
+        return;
+      }
+      if (e.target.closest("[data-calls]")) {
+        state.calls = !state.calls; store.set("lattice-calls", state.calls ? "on" : "off");
+        if (state.stock) { renderPeriod(chartColors()); renderLegend(); }
         return;
       }
       const f = e.target.closest("[data-fc]");
@@ -1061,7 +1143,8 @@
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => setTheme());
     pollToday();
     setInterval(pollToday, 30000);
-    setInterval(pollOne, 20000);
+    const loopOne = async () => { await pollOne(); setTimeout(loopOne, (state.today.poll || 20) * 1000); };   // 3 s with IEX, 20 s with Yahoo
+    setTimeout(loopOne, 3000);
   }
   start();
 })();

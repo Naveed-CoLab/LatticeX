@@ -13,7 +13,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 | # | Step (details in [`project-flow.md`](project-flow.md)) | Status |
 |---|---|---|
 | 1 | Define the question and how to score it | ✅ |
-| 2 | Build the test bench before any model (48 tests) | ✅ |
+| 2 | Build the test bench before any model (51 tests) | ✅ |
 | 3 | Collect the data (prices, fundamentals, 8-K filings, membership) | ✅ |
 | 4 | Turn data into features (44) | ✅ |
 | 5 | Compare models | ✅ |
@@ -82,6 +82,22 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 ---
 
 ## Work log (newest first)
+
+### 18 Nov 2026 — Real-time prices (IEX), market open/closed, big-move note
+- On the server the open stock's price stayed at $152.82 while the market was open: today's prices came only from Yahoo (every 20 s for the open stock, every 10 min for all), which can be delayed, and on the cloud server Yahoo's figure for the day did not appear to move (cause not confirmed; Yahoo may serve data centres more slowly).
+- New `src/ingest/alpaca_live.py`: with Alpaca keys, today's prices come from Alpaca's free IEX real-time data (snapshots of up to 100 symbols per request, under 150 requests a minute; the free plan allows 200 and IEX only). Open stock every 2–3 s, every stock every 30 s. The day's change is measured from our last close, IEX volume is not shown as the day's volume, and the page labels the source. Falls back to Yahoo on any error.
+- Market open/closed badge in the header with the closing or opening time in the visitor's time zone; with Alpaca keys it uses Alpaca's market clock, which knows holidays (Thanksgiving, 26 Nov, now shows closed).
+- Measured how ranges hold after big days (2012–2024, 80% range): normal day 79.2% / 78.9% (5 / 20 days); stock moved 2–4× its usual day 76.9% / 77.2%; 4× or more 87.6% / 86.7% (the volatility inputs widen them at once); market moved ±2% 75.7% / 79.1%. New red note on the stock page during such days, quoting these figures.
+- 51 tests pass (2 new: IEX parsing and call budget; holiday-aware clock).
+
+### 18 Nov 2026 — Score 1–10, past calls on the chart, confidence on the ranges, layout
+- Compared with StockAnalysis (analyst targets, no track record) and Danelfin (AI Score 1–10, backtest only): `market-comparison.md` section 5b.
+- **Score 1–10** from the rank, with how each score did in 2012–2024 (`scripts/rank_scores.py`): share beating the S&P 500 from 47.6% (score 1) to 49.9% (score 10) at 20 days; 48.4% to 50.5% at 5 days; 48.2% to 50.6% at 60 days. Shown as ten bars in the rank card; the page calls it an edge across many stocks, not a sure call.
+- **Past calls on each chart**: top- and bottom-fifth calls from the 2025–26 holdout and the live log, with the result of each on hover and a count under the chart. `upload_data.ps1` now also copies the holdout predictions to the server.
+- **Confidence on the ranges**: each card shows its 2025–26 holdout hit rate; the Track record page has the holdout table and the score table.
+- **Layout**: top bar in two rows under 1,100 px (buttons no longer wrap), stock list 268 px under 1,000 px, forecast cards stack when the main area is narrow, rank rows no longer stretch, analyst chart labels no longer overlap on phones. Checked at 390, 820, 1,024 and 1,440 px.
+- Correction: the range figures in `results.md` 5d were computed with an older SEC filings file; the product's figures are 79.3% / 79.0% / 79.1% (noted there).
+- 49 tests pass (1 new: past calls).
 
 ### 18 Nov 2026 — Holdout: price ranges pass
 - `python -m scripts.holdout_ranges`, run once: range model v2 fitted to 2024, scored on 2025–26 (47,323 / 45,798 / 41,614 forecasts). The 80% range held **78.9% / 78.1% / 77.8%** at 5 / 20 / 60 days, 50% range 47–49%, 90% range 89%, day's high and low 88.5–89.6%. **Every pre-set band passed.**

@@ -64,6 +64,8 @@ SEC_USER_AGENT=Your Name your.email@example.com
 LATTICEIQ_PASSWORD=a long password only your team knows
 ```
 
+Optional, for prices in real time (IEX exchange, free Alpaca account; without them prices come from Yahoo and can be delayed): add your Alpaca keys on two more lines, `ALPACA_API_KEY=` and `ALPACA_API_SECRET=`, then restart. The log then says "(IEX real-time)" every 10 minutes during market hours.
+
 Then:
 
 ```bash

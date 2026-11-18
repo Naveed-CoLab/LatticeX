@@ -84,7 +84,7 @@ flowchart TD
 - A Random Walk baseline that every model must beat.
 - Tests run on every push to GitHub.
 
-**Result.** 48 tests pass today. On random data the model shows no skill (t near 0); on planted momentum it finds it (rank IC 0.10, t 13).
+**Result.** 51 tests pass today. On random data the model shows no skill (t near 0); on planted momentum it finds it (rank IC 0.10, t 13).
 
 **Where.** `tests/test_pipeline.py`, `src/data/synthetic.py`, `src/eval/metrics.py`, [`architecture.md`](architecture.md#point-in-time-rules-no-look-ahead).
 
@@ -254,7 +254,7 @@ Data, method, results with their limits, the data error and how it was handled, 
 
 | Question | How to check |
 |---|---|
-| Is there look-ahead? | `pytest -q` runs 48 tests, including "random data shows no skill"; GitHub Actions runs them on every push |
+| Is there look-ahead? | `pytest -q` runs 51 tests, including "random data shows no skill"; GitHub Actions runs them on every push |
 | Are the numbers real? | Each run's settings and metrics are in `results/<run>/`; runs `20261114_0752`, `0809`, `0827` hold the v1.0 headline numbers |
 | Was the holdout used? | `holdout_start: "2025-01-01"` in `config/settings.yaml` is enforced by `src/folds.py`; there is a test for it |
 | What do we claim? | The claims table in the [README](../README.md#what-we-claim-and-what-we-dont): what we say, what we do not, and why |

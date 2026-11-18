@@ -944,3 +944,61 @@ def test_range_fit_key_ignores_line_endings_and_file_times(tmp_path):
     before = fingerprint(p)
     os.utime(p, (1, 1))
     assert fingerprint(p) == before
+
+
+def test_past_calls_on_chart_use_only_top_and_bottom_fifth_and_score_them_after_the_window(tmp_path, monkeypatch):
+    """The chart shows the model's own past calls: only top- and bottom-fifth ranks, and a result only once the
+    look-ahead window has ended (stock return minus SPY's over the next h trading days)."""
+    from scripts import export_dashboard as ed
+    monkeypatch.setattr(ed, "ROOT", tmp_path)
+    days = pd.bdate_range("2026-09-01", periods=40)
+    px = pd.concat([pd.DataFrame({"ticker": t, "date": days, "adj_close": 100 * g ** np.arange(40)})
+                    for t, g in (("UP", 1.01), ("DN", 0.99), ("MID", 1.0))], ignore_index=True)
+    spy = pd.DataFrame({"ticker": "SPY", "date": days, "adj_close": 100.0})
+    log = tmp_path / "data" / "live" / "forecasts"
+    log.mkdir(parents=True)
+    for d in (days[0], days[30]):          # the second is too recent for a 20-day result
+        pd.DataFrame({"asof": f"{d:%Y-%m-%d}", "ticker": ["UP", "MID", "DN"], "horizon": 20, "score": [0, 0, 0],
+                      "pct": [0.95, 0.5, 0.05], "pos": [1, 2, 3], "n": 3, "expected_excess": 0.0, "close": 1.0}
+                     ).to_csv(log / f"{d:%Y-%m-%d}.csv", index=False)
+    c = ed.past_calls(px, spy, days[0])
+    assert set(c) == {"UP", "DN"}                                           # the middle stock made no call
+    up = c["UP"]["20"]
+    assert up[0][:3] == [f"{days[0]:%Y-%m-%d}", "top", 10] and up[0][3] == pytest.approx(1.01 ** 20 - 1, abs=1e-4)
+    assert c["DN"]["20"][0][1] == "bottom" and c["DN"]["20"][0][3] < 0
+
+
+def test_iex_snapshots_give_todays_price_against_our_own_close(monkeypatch):
+    """Alpaca IEX snapshots -> the same quote shape as Yahoo's. The day's change is measured from OUR last close
+    (IEX's previous close is only IEX's last trade); IEX volume is not passed off as the day's volume; a stock with
+    no trade since the last finished day gives nothing; tickers with '-' are asked for with '.'."""
+    from src.ingest import alpaca_live as al
+    monkeypatch.setattr(al, "_headers", lambda: {})
+    al.BUDGET = al.Budget(100)
+    seen = {}
+
+    def fake(url, params, headers):
+        seen["symbols"] = params["symbols"]
+        return {"NVDA": {"latestTrade": {"t": "2026-11-18T17:15:02.5Z", "p": 150.0},
+                         "dailyBar": {"t": "2026-11-18T05:00:00Z", "o": 156.0, "h": 157.0, "l": 149.5, "c": 150.0, "v": 900},
+                         "prevDailyBar": {"t": "2026-11-17T05:00:00Z", "c": 155.0}},
+                "BRK.B": {"latestTrade": {"t": "2026-11-17T20:59:59Z", "p": 480.0}}}
+    q = al.snapshots(["NVDA", "BRK-B"], {"NVDA": 155.46, "BRK-B": 481.0}, "2026-11-17", get=fake)
+    assert seen["symbols"] == "NVDA,BRK.B"
+    assert set(q) == {"NVDA"}                                   # BRK-B's last trade was on the finished day
+    n = q["NVDA"]
+    assert n["date"] == "2026-11-18" and n["last"] == 150.0 and n["prev"] == 155.46 and n["src"] == "iex"
+    assert (n["open"], n["high"], n["low"], n["volume"]) == (156.0, 157.0, 149.5, 0)
+    # the call budget: no more requests than allowed in a minute
+    b = al.Budget(2)
+    assert b.take() and b.take() and not b.take()
+
+
+def test_market_clock_from_alpaca_knows_holidays(monkeypatch):
+    """With Alpaca keys the open/closed state comes from Alpaca's clock (which knows holidays), in the same shape."""
+    from src.ingest import alpaca_live as al, live
+    monkeypatch.setattr(al, "available", lambda: True)
+    monkeypatch.setattr(al, "clock", lambda: {"timestamp": "2026-11-26T10:00:00-05:00", "is_open": False,
+                                             "next_open": "2026-11-27T09:30:00-05:00", "next_close": "2026-11-27T13:00:00-05:00"})
+    st = live.market_state()                                    # Thanksgiving: a weekday, but closed
+    assert st["open"] is False and st["next_open"] == "2026-11-27T14:30:00Z" and st["clock"] == "alpaca"

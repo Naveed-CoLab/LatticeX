@@ -99,8 +99,18 @@ def download(tickers: list, last_day: pd.Timestamp, fetch=None, workers: int = 4
 
 
 def market_state(now=None) -> dict:
-    """Is the US stock market open right now, and when does it open next? Regular hours only (9:30 to 16:00
-    New York, Monday to Friday). Market holidays are not known: on one, this says open and no prices arrive."""
+    """Is the US stock market open right now, and when does it open next? With Alpaca keys in .env this is
+    Alpaca's market clock, which knows holidays and early closes. Otherwise regular hours only (9:30 to 16:00
+    New York, Monday to Friday) and market holidays are not known: on one, this says open and no prices arrive."""
+    if now is None:
+        from src.ingest import alpaca_live
+        c = alpaca_live.clock() if alpaca_live.available() else None
+        if c and "is_open" in c:
+            z = lambda t: pd.Timestamp(t).tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
+            ny = pd.Timestamp(c["timestamp"]).tz_convert("America/New_York")
+            return {"open": bool(c["is_open"]), "day": f"{ny:%Y-%m-%d}", "ny_time": f"{ny:%H:%M}",
+                    "next_open": None if c["is_open"] else z(c["next_open"]),
+                    "closes": z(c["next_close"]) if c["is_open"] else None, "clock": "alpaca"}
     ny = pd.Timestamp(now) if now is not None else pd.Timestamp.now(tz="America/New_York")
     if ny.tzinfo is not None:
         ny = ny.tz_convert("America/New_York").tz_localize(None)
