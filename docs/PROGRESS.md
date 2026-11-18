@@ -13,7 +13,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 | # | Step (details in [`project-flow.md`](project-flow.md)) | Status |
 |---|---|---|
 | 1 | Define the question and how to score it | ✅ |
-| 2 | Build the test bench before any model (47 tests) | ✅ |
+| 2 | Build the test bench before any model (48 tests) | ✅ |
 | 3 | Collect the data (prices, fundamentals, 8-K filings, membership) | ✅ |
 | 4 | Turn data into features (44) | ✅ |
 | 5 | Compare models | ✅ |
@@ -24,7 +24,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 | 10 | Run it every day (live prices, train once / score daily, forecast log) | ✅ |
 | 11 | Improve the model, one test at a time | ✅ stopped 17 Nov (news ❌); the rest is future work |
 | 12 | Live track record from the forecast log | ⏳ |
-| 13 | Holdout test 2025–26, once | 🔄 rules locked 17 Nov, run next |
+| 13 | Holdout test 2025–26, once | 🔄 ranges ✅ passed 18 Nov; ranking running |
 | 14 | Report and presentation | ⏳ by 28 Nov |
 | 15 | Before a launch | ⏳ |
 
@@ -82,6 +82,13 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 ---
 
 ## Work log (newest first)
+
+### 18 Nov 2026 — Holdout: price ranges pass
+- `python -m scripts.holdout_ranges`, run once: range model v2 fitted to 2024, scored on 2025–26 (47,323 / 45,798 / 41,614 forecasts). The 80% range held **78.9% / 78.1% / 77.8%** at 5 / 20 / 60 days, 50% range 47–49%, 90% range 89%, day's high and low 88.5–89.6%. **Every pre-set band passed.**
+- Recorded openly: v1 (the secondary) held about 80% everywhere; v2 is 1.1–2.2 points under 80% (up to 2.6 below v1), with ranges 3–8% narrower. v2's upward tilt was too high for 2025–26 (close above the middle 44.6% at 60 days). Nothing changed, as the lock requires; noted for a later version. Details: `results.md` section 8a.
+- Server: Lightsail `latticeiq-web` (Sydney, 1 GB, $7 a month) created and set up with `deploy/aws/setup.sh`; site address `https://3-27-118-9.sslip.io`. Data upload and first start next.
+- Ranking holdout running on Kaggle (CPU).
+- First start on the server: Yahoo prices and the daily ranking work from AWS (500 stocks ranked in 170 s with swap). The saved range fit was not reused, because Git gives `config/universe.csv` Windows line endings on the PC (26,297 bytes) and Linux ones on the server (25,454), and the fit was keyed by file size. The server tried to refit (about 4.5 GB) and was killed for lack of memory. Fixed: text files are now fingerprinted with line endings removed, and a machine with under 3.5 GB stops with a clear message instead of refitting. New test (48).
 
 ### 17 Nov 2026 — Model final; holdout test locked
 - Decision: no more improvement tests before the report. The last three ideas (news, Kronos, TimesFM) each added less than run-to-run noise; the holdout is the stronger result and must come after the model is final.

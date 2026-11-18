@@ -344,7 +344,7 @@ Outside systems: Yahoo Finance, SEC EDGAR, Tiingo, Alpaca, Kaggle, a logo servic
 
 | ID | Requirement | How it is met or checked |
 |---|---|---|
-| NFR-1 | **No look-ahead.** A feature on day *t* uses only what was public by the close of *t* | Filing dates, first-filed values, index membership on that day, news after 4 pm counted for the next day; 47 automated tests, including "random data must show no skill" and "a planted signal must be found" |
+| NFR-1 | **No look-ahead.** A feature on day *t* uses only what was public by the close of *t* | Filing dates, first-filed values, index membership on that day, news after 4 pm counted for the next day; 48 automated tests, including "random data must show no skill" and "a planted signal must be found" |
 | NFR-2 | **Honest evaluation.** Every published number comes from the walk-forward test or the locked holdout | 60-day gap between training and test; same weekly dates for every model; holdout from 1 Jan 2025 excluded in code |
 | NFR-3 | **Honest wording.** No buy or sell calls, no accuracy percentage, no profit figure; "not investment advice" on the page | Track record page; claims table above |
 | NFR-4 | **Speed.** Price update about a minute; ranking under a minute; page data about 10 seconds; price on screen at most 20 seconds old plus the source's delay of up to 15 minutes | Measured on the development PC |

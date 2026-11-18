@@ -304,6 +304,35 @@ v1.0 with and without the 8 news inputs (FinBERT tone of 767,435 Benzinga articl
 
 **Verdict.** News helps a little in the years with big news-driven moves (2020, 2021, 2023), but the gain is about twice the difference between two runs of the very same model and well short of the bar (paired t about 2, most years better at both horizons). At 20 days it is worse in 3 of 7 years. The top and bottom fifths do not improve. **v1.0 stays; news is not added.** By the rule set before the test, a stronger language model for sentiment is not tried either. The download, scoring and features stay in the code for a later retest with more years or a licensed feed.
 
+## 8. Holdout 2025–26: the one-time final test (rules in `holdout-lock.md`, locked 17 Nov)
+
+### 8a. Price ranges — pass (18 Nov 2026)
+
+Range model v2 as in the product, fitted on windows that ended by 31 Dec 2024, scored on every weekly forecast from 8 Jan 2025 whose window ended by the end of the data. Run `20261118_2033_ranges_HOLDOUT`.
+
+| v2 (primary) | 5 days | 20 days | 60 days | Pass band |
+|---|---|---|---|---|
+| Forecasts | 47,323 | 45,798 | 41,614 | |
+| "4 in 5" (80%) range held | **78.9%** | **78.1%** | **77.8%** | 75–85% ✅ |
+| 50% range held | 48.5% | 48.0% | 47.2% | 45–55% ✅ |
+| 90% range held | 89.2% | 88.9% | 88.9% | 85–95% ✅ |
+| Day's high stayed below X | 88.7% | 88.8% | 89.1% | 85–95% ✅ |
+| Day's low stayed above Y | 89.6% | 88.8% | 88.5% | 85–95% ✅ |
+| 80% range held in earnings windows · other windows | 76.5% · 79.3% | 76.8% · 79.0% | 77.7% · 82.7% | |
+| Average width of the 80% range | 10.7% | 21.7% | 36.8% | |
+| Close ended above the range's middle | 49.2% | 47.3% | 44.6% | (50% ideal) |
+
+| v1 (secondary), same forecasts | 5 days | 20 days | 60 days |
+|---|---|---|---|
+| 80% range held · width | 79.9% · 11.1% | 79.9% · 22.9% | 80.4% · 39.9% |
+| 50% · 90% held | 49.6% · 90.1% | 49.8% · 90.1% | 50.6% · 90.4% |
+
+80% range held by quarter (v2): 5 days 70–84%, 20 days 68–89%, 60 days 70–86%. The weakest quarters were 2025 Q4 and 2026 Q1; the partial last quarter (2026 Q4, 619 forecasts at 20 days) held 50%.
+
+**Reading.** v2 passes every pre-set band, and its 2025–26 hit rates are close to its 2012–2024 replay (79.2% / 78.8% / 79.1%). Two honest points. First, v1 was better calibrated on the holdout (about 80% at every horizon) while v2 was 1.0 / 1.8 / 2.6 points under target, in exchange for ranges 3.2% / 5.2% / 7.7% narrower. Second, the main source of v2's shortfall is its upward tilt: it centres the range on the drift of 2001–2024, and in 2025–26 the close ended above the middle only 44.6% of the time at 60 days. By the lock's rules nothing is changed on the basis of this; it is recorded as the first thing to look at in a later version.
+
+### 8b. Ranking — running
+
 ## 6. Single-feature ICs (2010–2024)
 
 All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), short-term reversal (`ret_5`, `ret_20` negative), free-cash-flow yield (+0.013), sector-relative momentum (+0.013), sector-relative earnings surprise (+0.011), accruals (−0.011). File: [`../results/factor_ic_2010_2024.csv`](../results/factor_ic_2010_2024.csv).

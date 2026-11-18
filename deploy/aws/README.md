@@ -86,6 +86,14 @@ The first start downloads three years of prices and checks the SEC filings (5–
 
 After each US close the server downloads the finished day, ranks the stocks and rebuilds the pages by itself, as on the PC.
 
+## If something goes wrong
+
+| Log shows | Cause | Fix |
+|---|---|---|
+| `Fitting the ranges ...` then `oom-kill` | The server did not reuse the range fit and tried to redo it (needs about 4.5 GB) | `sudo systemctl stop latticeiq`; on the PC run `python -m scripts.run_dashboard` once, then `upload_data.ps1`, then start again. Since 18 Nov the fit no longer depends on line endings or file times, and a small server stops with this advice instead of crashing |
+| `ssh_dispatch_run_fatal ... Connection timed out` at the start of `upload_data.ps1` | A brief network drop on the first connection | Harmless if the file lines follow without errors; otherwise run it again |
+| `Not available from Yahoo (6): ANSS CA FL ...` | Former members that no longer trade | Nothing; they are used only for comparison |
+
 ## Known limits
 
 - **Yahoo from a data centre.** Daily prices come from Yahoo, which sometimes limits requests from cloud servers. If the log shows price downloads failing, the site keeps showing the last good day; the fix is a licensed price feed, which a commercial launch needs anyway.

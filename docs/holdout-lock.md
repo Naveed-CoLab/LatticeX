@@ -82,4 +82,6 @@ If a figure falls outside its band, the page's wording ("right 4 times in 5") wi
 
 | Date | What | Result folder | Notes |
 |---|---|---|---|
-| | | | |
+| 17 Nov 2026 | Lock committed and pushed | Git commit `bc60f0a` | Before any 2025–26 number was seen |
+| 18 Nov 2026 | Ranking holdout started on Kaggle (CPU) | `latticeiq-holdout-cpu` | |
+| 18 Nov 2026 | Price ranges scored, first and only run | `results/20261118_2033_ranges_HOLDOUT` | **Pass** on every band (`results.md` section 8) |

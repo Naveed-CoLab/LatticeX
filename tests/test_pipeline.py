@@ -925,3 +925,22 @@ def test_holdout_test_trains_before_2025_and_scores_only_2025_on(tmp_path, monke
         assert "already been run" in str(e)
     finally:
         shutil.rmtree(r["out"], ignore_errors=True)
+
+
+def test_range_fit_key_ignores_line_endings_and_file_times(tmp_path):
+    """The range fit saved on the Windows PC must be reused on the Linux server: Git gives the same CSV different
+    line endings there, and copying changes file times."""
+    import os
+    from scripts.export_dashboard import fingerprint
+    a, b = tmp_path / "win" / "universe.csv", tmp_path / "linux" / "universe.csv"
+    a.parent.mkdir(); b.parent.mkdir()
+    a.write_bytes(b"ticker,type\r\nAAPL,stock\r\n")
+    b.write_bytes(b"ticker,type\nAAPL,stock\n")
+    assert fingerprint(a)[1:] == fingerprint(b)[1:]
+    b.write_bytes(b"ticker,type\nMSFT,stock\n")
+    assert fingerprint(a)[1:] != fingerprint(b)[1:]                    # a real change still counts
+    p = tmp_path / "prices.parquet"
+    p.write_bytes(b"x" * 100)
+    before = fingerprint(p)
+    os.utime(p, (1, 1))
+    assert fingerprint(p) == before

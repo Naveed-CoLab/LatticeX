@@ -201,18 +201,42 @@ def stock_rows(px: pd.DataFrame, tickers) -> pd.DataFrame:
     return px.sort_values(["ticker", "date"]).reset_index(drop=True)
 
 
+def fingerprint(f: Path) -> list:
+    """What identifies a research file for the saved range fit. The frozen data files never change in place, so
+    their size does; text files are hashed with line endings removed, because Git gives a Windows PC CRLF and a
+    Linux server LF for the same file. File times are left out. So a fit copied from the PC to a server is reused."""
+    if not f.exists():
+        return [f.name]
+    if f.suffix in (".csv", ".txt", ".json"):
+        import hashlib
+        return [f.name, hashlib.sha1(f.read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16]]
+    return [f.name, f.stat().st_size]
+
+
+def memory_gb() -> float | None:
+    """Total memory of this machine in GB (Linux and macOS), None where it cannot be read (Windows)."""
+    import os
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1e9
+    except (AttributeError, ValueError, OSError):
+        return None
+
+
 def range_fit(u: pd.DataFrame, ev: pd.DataFrame | None) -> tuple:
     """Weights and multipliers (windows that ended by CALIB_END) and the 2012-2024 walk-forward record, from the
     frozen research data. Takes a minute or two, so the result is kept until one of its input files changes."""
     files = [path("clean") / "prices.parquet", path("clean") / "sec_events.parquet", ROOT / "config" / "universe.csv"]
-    # the frozen research files never change in place, so their sizes identify them; file times are left out so
-    # that a fit copied from another computer (e.g. to the server) is reused instead of refitted
-    key = [FIT_VERSION, f"{CALIB_END:%Y-%m-%d}"] + [[f.name, f.stat().st_size] if f.exists() else [f.name] for f in files]
+    key = [FIT_VERSION, f"{CALIB_END:%Y-%m-%d}"] + [fingerprint(f) for f in files]
     cache = ROOT / "data" / "live" / "range_fit.json"
     if cache.exists():
         saved = json.loads(cache.read_text(encoding="utf-8"))
         if saved.get("key") == key:
             return {int(h): v for h, v in saved["fit"].items()}, saved["ranges"]
+    mem = memory_gb()
+    if mem is not None and mem < 3.5:          # the fit needs about 4.5 GB; a small server would be killed half-way
+        raise SystemExit(f"The saved range fit (data/live/range_fit.json) is missing or out of date, and refitting it needs about "
+                         f"4.5 GB of memory; this machine has {mem:.1f} GB. Run the dashboard once on the PC, then copy the file "
+                         f"here with deploy/aws/upload_data.ps1.")
     print("Fitting the ranges on the research data and replaying 2012-2024 (a minute or two, only when the data changes)", flush=True)
     allpx = frozen_prices()
     px = stock_rows(allpx, u["ticker"])

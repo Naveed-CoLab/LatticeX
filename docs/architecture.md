@@ -125,7 +125,7 @@ Tested and not used: macro (8, `macro.py`), Kronos forecasts (2) and TimesFM for
 | Macro (FRED) | Each value usable only from its release date (ALFRED vintages); market series the next day |
 | Kronos, TimesFM | Forecast made at *t* from data up to *t*, carried forward at most 31 days, never backwards |
 
-Each rule has a test in `tests/test_pipeline.py` (47 tests). The two key sanity tests:
+Each rule has a test in `tests/test_pipeline.py` (48 tests). The two key sanity tests:
 
 - **Random data → no skill.** On pure noise the model must show a rank IC t-statistic near 0. A "win" here means leakage.
 - **Planted signal → found.** On data with a built-in momentum effect, the model must find it (t > 3).
