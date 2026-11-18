@@ -501,10 +501,47 @@
     pollOne();
     loadAnalysts(t);
   }
+  // the big price, as on Google's stock card: when it changes, only the digits that changed roll to the new value
+  // and the number turns green (up) or red (down) for a moment, then back to its normal colour
+  const ODO = "0123456789".split("").map((d) => `<i>${d}</i>`).join("");
+  function odoHTML(text) {
+    return [...text].map((ch) => /\d/.test(ch)
+      ? `<span class="dg"><span class="col" style="transform:translateY(-${ch}em)">${ODO}</span></span>`
+      : `<span class="ch">${ch}</span>`).join("");
+  }
+  function setPrice(v, t) {
+    const el = $("price"), text = money(v), prev = el.dataset.v === undefined ? null : Number(el.dataset.v);
+    const sameStock = el.dataset.t === t;
+    el.dataset.v = v; el.dataset.t = t;
+    el.setAttribute("aria-label", text);
+    const old = el.querySelector(".odo");
+    if (!old || !sameStock || prev === null || old.dataset.text.length !== text.length || [...text].some((c, i) => /\d/.test(c) !== /\d/.test(old.dataset.text[i]))) {
+      el.innerHTML = `<span class="odo" aria-hidden="true" data-text="${text}">${odoHTML(text)}</span>`;   // new stock or the layout changed: no roll
+      return;
+    }
+    if (old.dataset.text === text) return;
+    const cols = old.querySelectorAll(".col");
+    let k = 0;
+    [...text].forEach((ch) => { if (/\d/.test(ch)) cols[k++].style.transform = `translateY(-${ch}em)`; });
+    old.dataset.text = text;
+    {
+      el.classList.remove("tick-up", "tick-dn"); void el.offsetWidth;          // restart the colour if ticks come quickly
+      el.classList.add(v > prev ? "tick-up" : "tick-dn");
+      clearTimeout(el._tick); el._tick = setTimeout(() => el.classList.remove("tick-up", "tick-dn"), 1600);
+    }
+    flashRow(t, v > prev);
+  }
+  // the same stock's price in the list on the left: a short green or red flash when it changes
+  function flashRow(t, up) {
+    const p = document.querySelector(`.rail [data-t="${CSS.escape(t)}"] .num .p`);
+    if (!p) return;
+    p.classList.remove("flash-up", "flash-dn"); void p.offsetWidth;
+    p.classList.add(up ? "flash-up" : "flash-dn");
+  }
   // the parts of the stock page that change while the market is open: price, the three ranges, the ladder
   function renderLive() {
     const s = state.stock, h = state.h, r = rangeNow(s, h), q = quote(s.t), st = state.today.state, b = r.bands["80"];
-    $("price").textContent = money(q ? q.last : s.price);
+    setPrice(q ? q.last : s.price, s.t);
     $("chg").innerHTML = q ? `${pill(q.last / q.prev - 1)}<span>today so far, ${day(q.date, true)}</span>` : `${pill(s.chg)}<span>close on ${day(s.asof, true)}</span>`;
     $("pxnote").textContent = q ? `Last close ${money(s.price)} on ${day(s.asof, true)} · ` + (q.src === "iex"
         ? `IEX real-time${q.time ? ", " + new Date(q.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) : ""}`

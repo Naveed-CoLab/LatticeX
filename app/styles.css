@@ -562,3 +562,17 @@ td small { display: block; color: var(--ink-3); font-size: 12px; }
   font-size: 13.5px; line-height: 1.45; color: var(--ink); max-width: 60em; }
 @media (max-width: 1240px) { .mkt span { display: none; } }
 @media (max-width: 780px) { .mkt { order: 6; } }
+/* the big price: rolling digits and a green / red tick, like a stock card on Google */
+.price { transition: color 1s ease; }
+.price.tick-up { color: var(--up-text); transition: color 0.15s ease; }
+.price.tick-dn { color: var(--down-text); transition: color 0.15s ease; }
+.odo { display: inline-flex; font-variant-numeric: tabular-nums; }
+.odo .dg { display: inline-block; height: 1em; line-height: 1em; overflow: hidden; }
+.odo .col { display: flex; flex-direction: column; transition: transform 1.2s cubic-bezier(.45, 0, .2, 1); }
+.odo .col i { display: block; height: 1em; line-height: 1em; font-style: normal; text-align: center; }
+.odo .ch { display: inline-block; line-height: 1em; }
+@keyframes flashUp { from { color: var(--up-text); background: var(--up-wash); } to { color: inherit; background: transparent; } }
+@keyframes flashDn { from { color: var(--down-text); background: var(--down-wash); } to { color: inherit; background: transparent; } }
+.num .p.flash-up { animation: flashUp 1.6s ease-out; border-radius: 4px; }
+.num .p.flash-dn { animation: flashDn 1.6s ease-out; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { .odo .col { transition: none; } }

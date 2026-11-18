@@ -83,6 +83,10 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 
 ## Work log (newest first)
 
+### 18 Nov 2026 — Price ticks like Google's stock card
+- Studied Google's NVDA card for a minute: it checks the price about every 10 seconds; on a change only the changed digits roll (each digit is a column of numbers that slides, 2 s), and the number turns green or red, then back to black.
+- The stock page's big price now does the same (digits roll in 1.2 s, green or red for 1.6 s, then fades back); the stock's price in the list flashes. Screen readers get the plain price; reduced-motion settings turn the roll off. With IEX prices the open stock updates every 2–3 s, so it ticks more often than Google's card.
+
 ### 18 Nov 2026 — Real-time prices (IEX), market open/closed, big-move note
 - On the server the open stock's price stayed at $152.82 while the market was open: today's prices came only from Yahoo (every 20 s for the open stock, every 10 min for all), which can be delayed, and on the cloud server Yahoo's figure for the day did not appear to move (cause not confirmed; Yahoo may serve data centres more slowly).
 - New `src/ingest/alpaca_live.py`: with Alpaca keys, today's prices come from Alpaca's free IEX real-time data (snapshots of up to 100 symbols per request, under 150 requests a minute; the free plan allows 200 and IEX only). Open stock every 2–3 s, every stock every 30 s. The day's change is measured from our last close, IEX volume is not shown as the day's volume, and the page labels the source. Falls back to Yahoo on any error.
