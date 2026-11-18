@@ -486,20 +486,52 @@
       if (scroll) { const list = $("list"); list.scrollTop = row.parentElement.offsetTop - list.clientHeight / 2 + 40; }
     }
     $("chart").classList.add("loading");
+    const slow = cache.has(t) ? null : setTimeout(() => state.sel === t && stageSkeleton(true), state.stock ? 150 : 0);
     if (!cache.has(t)) cache.set(t, fetch(`data/stocks/${encodeURIComponent(t)}.json`).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }));
     let s;
     try { s = await cache.get(t); } catch (e) {
-      cache.delete(t); $("chart").classList.remove("loading");
+      cache.delete(t); $("chart").classList.remove("loading"); clearTimeout(slow); stageSkeleton(false);
       $("say").textContent = `${t} could not be loaded. Rebuild the data with: python -m scripts.run_dashboard --refresh`;
       return;
     }
+    clearTimeout(slow);
     if (state.sel !== t) return;
     state.stock = s;
     $("chart").classList.remove("loading");
+    if (document.querySelector(".stage.skel")) stageSkeleton(false);
     route();
     renderStock(true, true);
     pollOne();
     loadAnalysts(t);
+  }
+  // ---------- loading skeletons: grey shapes where content will appear, shown only while data is on its way ----------
+  const sk = (w, h, cls = "") => `<span class="sk ${cls}" style="width:${w};height:${h}"></span>`;
+  const rep = (n, f) => Array.from({ length: n }, (_, i) => f(i)).join("");
+  function skeletonTape() {
+    $("tape").innerHTML = rep(8, () => `<div class="sk-cell">${sk("64px", "10px")}${sk("88px", "13px")}${sk("54px", "22px", "spark")}</div>`);
+  }
+  function skeletonList() {
+    $("list").innerHTML = rep(12, (i) => `<li class="row sk-row" aria-hidden="true">${sk("30px", "30px", "round")}<span>${sk(`${46 + (i * 17) % 30}px`, "12px")}${sk(`${80 + (i * 23) % 50}px`, "10px")}</span>${sk("48px", "18px")}<span>${sk("52px", "12px")}${sk("40px", "10px")}</span></li>`);
+    $("count").innerHTML = sk("70px", "12px");
+  }
+  function skeletonOverview() {
+    $("overview").innerHTML = `<div class="sk-page" aria-busy="true" aria-label="Loading">${sk("min(520px, 80%)", "40px")}${sk("min(680px, 95%)", "16px")}${sk("min(560px, 85%)", "16px")}
+      ${sk("100%", "12px", "gapped")}<div class="sk-grid">${rep(5, () => `<div class="sk-card">${sk("60%", "12px")}${sk("90%", "10px")}${sk("75%", "10px")}${sk("82%", "10px")}</div>`)}</div>
+      <div class="sk-grid two">${rep(2, () => `<div class="sk-card tall">${sk("50%", "16px")}${rep(5, (i) => sk(`${70 + i * 5}%`, "12px"))}</div>`)}</div></div>`;
+  }
+  function stageSkeleton(on) {                            // the stock page while a stock's data loads
+    const stage = document.querySelector(".stage"), side = document.querySelector(".side");
+    if (on && !stage.querySelector(".stage-skel")) {
+      stage.insertAdjacentHTML("afterbegin", `<div class="stage-skel" aria-busy="true" aria-label="Loading the stock">
+        <div class="sk-head">${sk("64px", "64px", "box")}${sk("220px", "28px")}</div>${sk("230px", "44px")}${sk("300px", "12px")}
+        <div class="sk-chips">${rep(5, (i) => sk(`${80 + i * 14}px`, "30px", "pill"))}</div>
+        <div class="sk-card wide">${sk("140px", "14px")}${rep(3, () => `<div class="sk-line">${sk("50px", "11px")}${sk("100%", "6px")}${sk("70px", "11px")}</div>`)}</div>
+        ${sk("200px", "14px")}<div class="sk-grid three">${rep(3, () => `<div class="sk-card">${sk("70%", "12px")}${sk("85%", "20px")}${sk("60%", "10px")}</div>`)}</div>
+        <div class="sk-card chart">${sk("100%", "100%", "flat")}</div></div>`);
+      side.insertAdjacentHTML("afterbegin", `<div class="side-skel" aria-hidden="true">${rep(3, () => `<div>${sk("60%", "14px")}${sk("90%", "12px")}${sk("80%", "12px")}${sk("100%", "10px")}</div>`)}</div>`);
+    }
+    stage.classList.toggle("skel", on); side.classList.toggle("skel", on);
+    if (!on) { stage.querySelector(".stage-skel")?.remove(); side.querySelector(".side-skel")?.remove(); stage.classList.add("reveal"); setTimeout(() => stage.classList.remove("reveal"), 400); }
   }
   // the big price, as on Google's stock card: when it changes, only the digits that changed roll to the new value
   // and the number turns green (up) or red (down) for a moment, then back to its normal colour
@@ -723,12 +755,16 @@
   async function loadAnalysts(t) {
     const box = $("analyst");
     if (!analysts.has(t)) {
-      box.hidden = true;
+      box.hidden = false; box.classList.add("skel");
+      $("an-chart").innerHTML = sk("100%", "220px", "flat");
+      $("an-side").innerHTML = sk("60%", "12px") + sk("45%", "34px") + rep(4, (i) => sk(`${90 - i * 8}%`, "12px"));
+      $("an-note").textContent = "Loading what analysts expect…";
       try {
         const r = await fetch("api/analysts?t=" + encodeURIComponent(t));
-        if (!r.ok) return;                                   // opened without the local server, or an older one
+        if (!r.ok) { if (state.sel === t) box.hidden = true; return; }    // opened without the local server, or an older one
         analysts.set(t, await r.json());
-      } catch (e) { return; }
+      } catch (e) { if (state.sel === t) box.hidden = true; return; }
+      finally { box.classList.remove("skel"); }
     }
     if (state.sel === t && state.stock) renderAnalysts(analysts.get(t));
   }
@@ -1033,10 +1069,15 @@
     const saved = store.get("lattice-theme"); if (saved) document.documentElement.dataset.theme = saved;
     if (store.get("lattice-chart") === "candles") state.ctype = "candles";
     try { state.stars = new Set(JSON.parse(store.get("lattice-stars") || "[]")); } catch (e) { state.stars = new Set(); }
+    const first = decodeURIComponent(location.hash.slice(1)).split("/")[0];
+    skeletonTape(); skeletonList();
+    if (!first || first === "overview") { $("overview").hidden = false; skeletonOverview(); }
+    else if (first !== "record") { $("stocks").hidden = false; stageSkeleton(true); }
     let index, track;
     try {
       [index, track] = await Promise.all(["data/index.json", "data/track.json"].map((u) => fetch(u).then((r) => { if (!r.ok) throw new Error(u); return r.json(); })));
     } catch (e) {
+      $("stocks").hidden = true; $("tape").innerHTML = "";
       $("overview").hidden = false;
       $("overview").innerHTML = `<div><h1>No data yet</h1><p class="lede">In the project folder run <strong>python -m scripts.run_dashboard</strong>. It builds the data from your price files and opens this page.</p></div>`;
       return;

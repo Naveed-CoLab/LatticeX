@@ -576,3 +576,28 @@ td small { display: block; color: var(--ink-3); font-size: 12px; }
 .num .p.flash-up { animation: flashUp 1.6s ease-out; border-radius: 4px; }
 .num .p.flash-dn { animation: flashDn 1.6s ease-out; border-radius: 4px; }
 @media (prefers-reduced-motion: reduce) { .odo .col { transition: none; } }
+/* ---------- loading skeletons ---------- */
+.sk { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--rule-soft) 25%, var(--sunk) 45%, var(--rule-soft) 65%);
+  background-size: 300% 100%; animation: sk 1.3s ease-in-out infinite; max-width: 100%; }
+.sk.round { border-radius: 50%; } .sk.pill { border-radius: 999px; } .sk.box { border-radius: 14px; } .sk.flat { border-radius: 10px; }
+@keyframes sk { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.tape .sk-cell { min-width: 190px; } .tape .sk-cell .sk { margin: 2px 0; } .tape .sk-cell .spark { grid-row: 1 / 3; grid-column: 2; }
+.sk-row { pointer-events: none; } .sk-row > span { display: grid; gap: 5px; } .sk-row > span:last-child { justify-items: end; }
+.sk-page { max-width: 1100px; margin: 0 auto; display: grid; gap: 12px; }
+.sk-page .gapped { margin: 18px 0 8px; }
+.sk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.sk-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
+.sk-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sk-card { display: grid; gap: 10px; align-content: start; padding: 16px; border: 1px solid var(--rule); border-radius: 14px; background: var(--sheet); }
+.sk-card.tall { min-height: 220px; } .sk-card.wide { margin: 18px 0; } .sk-card.chart { height: 380px; margin-top: 18px; padding: 10px; }
+.sk-line { display: grid; grid-template-columns: 50px minmax(0, 1fr) 70px; gap: 12px; align-items: center; }
+.stage-skel { display: grid; gap: 12px; align-content: start; }
+.sk-head { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+.sk-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.stage.skel > *:not(.stage-skel), .side.skel > *:not(.side-skel) { display: none !important; }
+.side-skel { display: grid; gap: 26px; padding-top: 18px; } .side-skel > div { display: grid; gap: 10px; }
+.analyst.skel .an-side { display: grid; gap: 10px; align-content: start; }
+.stage.reveal > * { animation: reveal 0.3s ease-out; }
+@keyframes reveal { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 780px) { .sk-grid, .sk-grid.two, .sk-grid.three { grid-template-columns: minmax(0, 1fr); } .sk-card.chart { height: 300px; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

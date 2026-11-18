@@ -55,6 +55,10 @@ Rank and range filters follow the look-ahead chosen at the top (5, 20 or 60 days
 
 On each stock page, **Against the market** (the model's rank for 5, 20 and 60 days and what that rank did in testing) sits right under the price, before the price ranges.
 
+## While it loads
+
+On the first visit, grey placeholder shapes in the layout of the page (market strip, stock list, overview or stock page, analyst chart) show where things will appear, with a soft shimmer, until the data arrives; then the page fades in. Switching stocks shows them only if the next stock takes longer than 0.15 s, so a quick switch does not flicker, and a stock already opened in this visit appears at once. Reduced-motion settings turn off the shimmer and fade. If loading fails, the placeholders go away and the error message shows.
+
 ## Screen sizes
 
 Laptops and tablets (under 1,100 px) get the top bar in two rows instead of squeezed buttons. When the stock list leaves the main area narrow, the three forecast cards stack, and the rank card puts its text under the three rows. Phones (under 780 px) get one column, with the stock list after the stock page. On phones the analyst chart drops its middle label and the target names so nothing overlaps.

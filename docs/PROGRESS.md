@@ -83,6 +83,10 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 
 ## Work log (newest first)
 
+### 18 Nov 2026 — Loading placeholders
+- First visit: grey shimmering placeholders in the page's own layout (market strip, stock list, overview or stock page, the analyst chart) instead of a blank screen, then a short fade-in. Checked with the data slowed to 2.5 s on a laptop, a phone and in dark mode.
+- Switching stocks: placeholders only if the stock takes over 0.15 s; stocks already opened appear at once (no flicker). Reduced motion turns the shimmer off. Tests: 51 pass.
+
 ### 18 Nov 2026 — Price ticks like Google's stock card
 - Studied Google's NVDA card for a minute: it checks the price about every 10 seconds; on a change only the changed digits roll (each digit is a column of numbers that slides, 2 s), and the number turns green or red, then back to black.
 - The stock page's big price now does the same (digits roll in 1.2 s, green or red for 1.6 s, then fades back); the stock's price in the list flashes. Screen readers get the plain price; reduced-motion settings turn the roll off. With IEX prices the open stock updates every 2–3 s, so it ticks more often than Google's card.
