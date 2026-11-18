@@ -173,14 +173,18 @@ def latest(tickers: list, days: int = 7) -> pd.DataFrame:
     """LIVE feed: re-read each company's most recent filings and list the 8-Ks of the last `days` days."""
     ciks = cik_map()
     since = pd.Timestamp.now(tz="UTC").normalize() - pd.to_timedelta(days, unit="D")
-    parts = []
-    for t in tickers:
-        if t in ciks:
-            df = fetch(t, ciks[t], full=False)
-            if len(df):
-                parts.append(df[df["accepted"] >= since])
-            time.sleep(0.12)
-    save_companies()
+    parts, t0 = [], time.time()
+    try:
+        for i, t in enumerate(tickers, 1):
+            if t in ciks:
+                df = fetch(t, ciks[t], full=False)
+                if len(df):
+                    parts.append(df[df["accepted"] >= since])
+                time.sleep(0.12)
+            if i % 50 == 0:
+                print(f"  {i} / {len(tickers)} companies  [{(time.time() - t0) / 60:.1f} min]", flush=True)
+    finally:
+        save_companies()                               # keep the industry codes collected so far, even if stopped
     ev = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
     if ev.empty:
         print(f"No 8-K filings in the last {days} days.")

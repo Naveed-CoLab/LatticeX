@@ -1,6 +1,6 @@
 # LatticeIQ — Progress & TODO
 
-_Last updated: 16 Nov 2026 · Owner: project lead (all roles)_
+_Last updated: 17 Nov 2026 · Owner: project lead (all roles)_
 Rule: update this file every time something is finished, decided or found. Newest log entries at the top.
 **New to the project?** Read [`project-flow.md`](project-flow.md) first: the whole project as one step-by-step story with the status of each step. This file is the working to-do list and the day-by-day log.
 
@@ -8,31 +8,31 @@ Rule: update this file every time something is finished, decided or found. Newes
 
 ## Where we are
 
-**Steps 1–10 of 15 done.** The ranking model v1.0 is chosen and measured (rank IC 0.015 / 0.020 / 0.020 at 5 / 20 / 60 days, 13 test years, audited list of 722 stocks), trained once on all data and run every day on the PC behind a three-page dashboard with live prices, price ranges, filings and analyst views. **Now (step 11): testing news sentiment against v1.0.**
+**Steps 1–10 of 15 done.** The ranking model v1.0 is chosen and measured (rank IC 0.015 / 0.020 / 0.020 at 5 / 20 / 60 days, 13 test years, audited list of 722 stocks), trained once on all data and run every day on the PC behind a three-page dashboard with live prices, price ranges, filings and analyst views. **Now (step 13): the model is final (v1.0 + range model v2) and the one-time 2025–26 holdout test is locked in [`holdout-lock.md`](holdout-lock.md); after it, the report and slides (by 28 Nov).** News sentiment was tested and not added; further improvement tests (insider purchases, SEC 8-K events) are future work.
 
 | # | Step (details in [`project-flow.md`](project-flow.md)) | Status |
 |---|---|---|
 | 1 | Define the question and how to score it | ✅ |
-| 2 | Build the test bench before any model (43 tests) | ✅ |
+| 2 | Build the test bench before any model (47 tests) | ✅ |
 | 3 | Collect the data (prices, fundamentals, 8-K filings, membership) | ✅ |
 | 4 | Turn data into features (44) | ✅ |
 | 5 | Compare models | ✅ |
 | 6 | Choose and lock v1.0 | ✅ |
 | 7 | Find the data error, audit, freeze "universe v2", re-measure | ✅ |
-| 8 | Price ranges (volatility range model in the product) | ✅ |
+| 8 | Price ranges (volatility range model v2 in the product) | ✅ |
 | 9 | Dashboard | ✅ |
 | 10 | Run it every day (live prices, train once / score daily, forecast log) | ✅ |
-| 11 | Improve the model, one test at a time | 🔄 news first |
+| 11 | Improve the model, one test at a time | ✅ stopped 17 Nov (news ❌); the rest is future work |
 | 12 | Live track record from the forecast log | ⏳ |
-| 13 | Holdout test 2025–26, once | ⏳ 🔒 |
+| 13 | Holdout test 2025–26, once | 🔄 rules locked 17 Nov, run next |
 | 14 | Report and presentation | ⏳ by 28 Nov |
 | 15 | Before a launch | ⏳ |
 
 ## To do, in order
 
 1. [ ] **Rotate keys** pasted in chat (Benzinga, FRED, Hugging Face, Tiingo, Kaggle, Alpaca) and update `.env`. Then delete the `Claude outputs` folder on the PC (it holds old copies of `.env`; it is never committed).
-2. [ ] **Publish** the work since 14 Nov to GitHub (safety check first, see the README's quick start and `CONTRIBUTING.md`).
-3. [ ] **News:** `python -m src.ingest.alpaca_news --start 2015-01` → `--combine` → `python -m scripts.kaggle_cloud upload-data` → `news-score` → `upload-data` → compare with and without `--news` on test years 2018–2024 at 5 and 20 days. Keep only if it beats v1.0 clearly, in most years.
+2. [ ] **Publish** the work since 14 Nov to GitHub (safety check first, see the README's quick start and `CONTRIBUTING.md`), then **host it**: `deploy/aws/README.md`.
+3. [x] **News:** tested 17 Nov, not added (+0.003, paired t 1.29 / 0.83; `results.md` 5e). Next in the same slot: **insider purchases** from SEC Form 4.
 4. [ ] **Sector-neutral target** on Kaggle (`--target sector`) vs v1.0.
 5. [ ] **Price ranges on universe v2:** 5 and 20 days ran on 15 Nov (results to write up); 60 days failed on a typo, rerun: `python -m scripts.kaggle_cloud brackets "--data real --fundamentals --horizon 60"`. Then compare with the volatility range model.
 6. [ ] **Crash risk and recovery** on real data (`kaggle_cloud crash ...`, `kaggle_cloud recovery ...`).
@@ -42,7 +42,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 10. [ ] FinText finance-pretrained Chronos: runner and comparison.
 11. [ ] ARIMA baseline (for the report).
 12. [ ] Retrain the daily model monthly or quarterly: `python -m scripts.kaggle_cloud final-model`.
-13. [ ] **Holdout test**, once, when the model is final.
+13. [ ] **Holdout test**, once: push `docs/holdout-lock.md` to GitHub first, then `python -m scripts.kaggle_cloud holdout --cpu` and `python -m scripts.holdout_ranges`.
 14. [ ] **Report and slides.**
 
 ### Later / before a launch
@@ -82,6 +82,79 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 ---
 
 ## Work log (newest first)
+
+### 17 Nov 2026 — Model final; holdout test locked
+- Decision: no more improvement tests before the report. The last three ideas (news, Kronos, TimesFM) each added less than run-to-run noise; the holdout is the stronger result and must come after the model is final.
+- Final: ranking **v1.0** (secondary: ensemble v2, as declared on 12 Nov), price ranges **v2** (secondary: v1).
+- `docs/holdout-lock.md` written before any 2025–26 number was seen: what is tested, the data files and their sizes, the exact commands, how much the short holdout can show (about 90 weekly dates; a real edge is expected to give t ≈ 1.2 and a positive rank IC 88% of the time), and the pass marks (main: 20-day rank IC > 0; ranges: 80% range held 75–85%). Results get published whatever they are.
+- Code: `run_experiment --holdout` (one model trained to 60 trading days before 1 Jan 2025, scored on every week from 2 Jan 2025), `kaggle_cloud holdout` (fixed commands, refuses a second run), `scripts/holdout_ranges.py` (ranges fitted to 2024, scored on 2025–26, refuses a second run). 47 tests pass (1 new).
+
+### 17 Nov 2026 — News sentiment tested: not added
+- Four runs on Kaggle's CPU, test years 2018–2024, v1.0 with and without the 8 news inputs. Rank IC 5 days **0.0111 → 0.0142**, 20 days **0.0099 → 0.0125**.
+- Tested date by date on the same weeks: paired t **1.29** (5 days) and **0.83** (20 days). Two runs of the identical model (today's CPU run vs the GPU run of 14 Nov) differ by 0.0015 on average and up to 0.005 in a single year, so a +0.003 gain is within reach of noise. At 20 days news was worse in 3 of 7 years; the top and bottom fifths did not improve.
+- Decision: **v1.0 stays**; news is not added; the stronger-language-model test, which depended on FinBERT news helping, is not run. Code and data kept for a retest. Full tables: `results.md` 5e.
+- Note for every later test: compare on the same machine type (CPU vs GPU runs of the same model differ by up to 0.005 a year).
+
+### 17 Nov 2026 — Ready to host on AWS
+- AWS Agent Toolkit set up on the PC (AWS CLI, sign-in profile `latticeiq`, Region ap-southeast-2; skills and the AWS MCP server for Claude Code and Gemini CLI).
+- 46 tests pass. Dashboard server mode: `--host` and a login (`LATTICEIQ_PASSWORD`, HTTP Basic, any user name); it refuses to listen beyond this computer without a password. New test: requests without the password get 401.
+- The daily ranking now runs in its own process (it needs 1.7–1.8 GB for about a minute; the memory is handed back afterwards). Page build measured at 0.7 GB peak.
+- The saved range fit is now keyed by the data files' sizes, not their times, so the fit copied from the PC is reused on the server.
+- `deploy/aws/`: `setup.sh` (swap, Python packages, Caddy HTTPS with a free certificate, service that starts on boot), `upload_data.ps1` (copies the data and model from the PC), `requirements-server.txt` (pandas kept below 3.0, as tested), step-by-step README. Plan: Lightsail 1 GB in Sydney, $7 a month.
+
+### 17 Nov 2026 — News comparison, first attempt (Kaggle CPU)
+- Ran on Kaggle's CPU (the GPU queue had waited 45+ minutes). Run 1 of 4, v1.0 without news, 5 days, test years 2018–2024: rank IC **0.0111** (t 1.51), positive in 6 of 7 years; 983 s. This is the baseline the news run must beat.
+- Run 2 (with news) stopped: the job's copy of the Kaggle dataset had `news_articles.parquet` but not `news_scored.parquet`, so runs 2–4 did not start. Next: check the dataset lists both files, then run the three remaining steps.
+- `run_experiment.py` now checks for the news files before building the panel, so a missing file fails in seconds instead of after 4–5 minutes.
+
+### 17 Nov 2026 — Range model v2 and the day's high and low on the dashboard
+- `src/models/vol_ranges.py` v2: a regression forecasts each stock's volatility over the window (five volatility measures, market mood from SPY, expected earnings, the stock's typical earnings move), and the lower and upper multipliers are fitted separately. Weights and multipliers fitted on windows ended by 31 Dec 2024; the 2012–2024 record refits them each year on earlier windows only.
+- Replayed in the product code, v1 scored on the same 306,000 stock forecasts per horizon: 80% range held **79.2% / 78.8% / 79.1%** (v1 79.5% / 79.0% / 79.1%) and is **2.2% / 3.4% / 4.9% narrower**; interval score better in 11 / 11 / 10 of 13 years; worst year 77.4% / 76.6% / 75.6% (v1 75.8% / 75.9% / 73.3%).
+- New on the stock page: "On <day> itself" in the side panel, the likely middle, "day's high stays below" and "day's low stays above". Held 89.6% / 89.0% / 88.7% (high) and 89.6% / 90.1% / 90.5% (low), aimed at 90%. The Track record page has the same table. The cone shows the likely middle as a dotted line; ranges show as down / up (e.g. −8.4% / +9.8%).
+- The range follows the price during the day as before, each side scaled separately. 45 tests pass (range tests rewritten, one new for the uneven sides). `data/live/range_fit.json` is rebuilt on the first run (a minute or two).
+
+### 17 Nov 2026 — Benchmarks checked
+- `market-comparison.md`: the Qlib figure, flagged earlier as quoted from memory, is now checked: CSI 300 rank IC 0.0485 (LightGBM), 0.0523 (DoubleEnsemble), 0.0573 (TRA, best). Price-range rows updated to the audited list (80% range held 79.5% / 79.0% / 79.1%).
+
+### 17 Nov 2026 — Searched for what else could improve the forecasts
+- v1.0 stays locked; every idea is tested against it and dropped if it does not beat it. Full table with sources: `decisions.md`, "Improvement search".
+- Ranking, in order: news sentiment (running) → insider purchases (free SEC Form 4 data; studies show +1.0% over 5 days, gone after a month) → SEC 8-K events → short interest (FINRA) → sector-neutral target and FinText (queued) → option-implied signals and the 200+ published predictors only with university WRDS access. A stronger language model for news only if FinBERT news helps.
+- Ranges: news counts next (shown to improve short-horizon volatility forecasts); implied volatility needs options history (Alpaca's starts in Feb 2024 and is paid; OptionMetrics via WRDS).
+- Open question for the team: does the university have WRDS?
+
+### 17 Nov 2026 — Narrower ranges and a day high/low: tested
+- Replayed every idea on 2012–2024 (about 318,000 weekly forecasts per horizon including the 18 funds, all fitting on earlier windows only; an earlier version of this note said 570,000, which was wrong). Full tables: `results.md` section 5d.
+- **Works, small:** a volatility forecast by regression (the current measures + one-week volatility + market mood + earnings) with uneven up/down multipliers: **2.4% / 3.7% / 5.0% narrower** at 5 / 20 / 60 days, same hit rate (79.0% / 78.7% / 79.1%), better in 10–11 of 13 years, worst year better everywhere. Market mood gives most of it; each stock's own earnings move adds about nothing.
+- **Rejected:** 18 multiplier groups (narrower only by missing more), adaptive last-year blend (worse), separate multipliers for new stocks (worse; new stocks hold about one point under the rest without it).
+- **Day high and low:** "high below X" held 88.7–89.4%, "low above Y" 89.6–90.5% (aimed at 90%). The middle of the range sits a little above today's price (+0.3% / +1.2% / +3.4%) because stocks drift up; the close ended above it 51% of the time.
+- Put on the page the same day (entry above).
+
+### 17 Nov 2026 — One price range by default
+- The stock page now shows one range, the 80% range ("right 4 times in 5"), in the chart cone (one band with a clear edge, labelled "4 in 5") and in the side panel. "Show 50% and 90% ranges" under the chart or in the side panel brings back all three; the choice is remembered. The forecast cards already showed only the 80% range. The API and the Track record page keep all three.
+- Checked in the simulation in light and dark, both modes.
+
+### 17 Nov 2026 — News sentiment scored on Kaggle
+- Merge run again with the fix: 4 articles dated before Jan 2015 left out; 767,435 Benzinga articles kept.
+- `news-score` on Kaggle's GPU: all 767,435 headlines and summaries scored by FinBERT in about 10 minutes (`data/clean/news_scored.parquet`, 18 MB). No missing scores, no duplicates. Tone: clearly negative 17.6%, slightly negative 9.0%, neutral 27.8%, slightly positive 18.7%, clearly positive 26.9%; average +0.09 (company news leans positive).
+- Data re-uploaded to Kaggle with the scores. Next: the four comparison runs (5 and 20 days, with and without news, test years 2018–2024), then keep or drop news.
+
+### 16 Nov 2026 — News history downloaded: 767,439 Benzinga articles, 2015 to today
+- `alpaca_news --start 2015-01` finished in 190 minutes (137 months; the first 6 were fetched the slower way earlier).
+- `--combine`: publishers benzinga 430,546, not recorded (pre-2022, Benzinga) 336,893, fiscal.ai 71,024 (left out). Kept 767,439 articles → `data/clean/news_articles.parquet`; the earlier thin file is kept as `news_articles_benzinga_plan.parquet`.
+
+| Year | 2015 | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 (to 16 Nov) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Articles | 47,051 | 48,024 | 37,036 | 38,848 | 41,055 | 53,756 | 70,834 | 83,188 | 89,312 | 90,679 | 88,110 | 79,542 |
+| Our stocks named | 705 | 701 | 694 | 676 | 673 | 675 | 673 | 669 | 660 | 667 | 662 | 653 |
+| Articles per stock | 67 | 69 | 53 | 57 | 61 | 80 | 105 | 124 | 135 | 136 | 133 | 122 |
+
+- Nearly every stock has news every year, about 1 to 2.6 articles a week each. Coverage doubles from 2015 to 2023; the news features are ranked across stocks on each day, which takes out that steady growth.
+- Found: 4 articles dated 2012–2014 (re-published pieces). Left in, the news features would have treated 2012–2014 as "covered, no news" instead of unknown, in the training years of the 2018 test. `--combine` now leaves out anything dated before the first month downloaded; run it once more before uploading.
+- Next: `upload-data` → `news-score` → `upload-data` → the four comparison runs (5 and 20 days, with and without news, 2018–2024).
+
+### 16 Nov 2026 — Logo
+- Mark: three candlesticks (hollow = up, filled = down) running into the forecast cone, which widens with the square root of time in the chart's three band strengths: the dashboard's own picture reduced to a few shapes. Tried first: a binomial price lattice (read like a "share" icon) and a cone of dots (abstract, no link to stocks); candles were asked for.
+- Files: `app/favicon.svg` (two candles on a blue tile for 16 px), `docs/assets/logo.svg` / `logo_dark.svg` (mark and name, letters as outlines), `logo_mark.svg` / `logo_mark_dark.svg`. The header draws the mark inline in the theme's colours. Checked in light and dark and at 16, 32 and 128 px.
 
 ### 16 Nov 2026 — Dashboard: sidebar filters, compact list, rank moved up
 - **Sidebar filters** on the Stocks page: sector, today's move (up/down), the model's rank (top or bottom 20%) and range (calm = narrowest third, wild = widest third), with a count of how many are on, "Clear filters", a count of stocks shown, and an empty state that offers to clear them. Rank and range follow the look-ahead; filters are remembered in the browser; the panel folds away (closed by default on phones).
@@ -349,7 +422,7 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 - Real-data run: XGBoost 0.0140 (t 1.80) · LightGBM 0.0080 · **MLP 0.0149 (t 1.96)** · Ridge 0.0042 · 3-model ensemble 0.0143.
 - Re-combined the saved predictions: **XGBoost + MLP = IC 0.0168, t 2.04, 11/13 years**, stable across 2012–17 (0.0171) and 2018–24 (0.0163). LightGBM ranks 86% like XGBoost (redundant); MLP only 43% → real diversification.
 - **Decision:** final model = XGBoost + MLP rank-average ensemble (`ENSEMBLE_MEMBERS` updated). LightGBM, Ridge OUT. First result past t = 2.
-- Next: sector-neutral target, full universe (Tiingo upgrade, waiting on Naveed), SEC insider/8-K features.
+- Next: sector-neutral target, full universe (Tiingo upgrade, waiting on the project lead), SEC insider/8-K features.
 
 ### 12 Nov 2026 (ensemble)
 - Decision (with Naveed): push accuracy with an **ensemble** now; Kronos fine-tuning + live news in FYP-2.

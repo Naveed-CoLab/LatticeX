@@ -1,0 +1,11 @@
+# Written by deploy/aws/setup.sh. Caddy gets and renews the HTTPS certificate by itself.
+__DOMAIN__ {
+	encode gzip
+	reverse_proxy 127.0.0.1:__PORT__
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

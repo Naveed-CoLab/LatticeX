@@ -42,11 +42,11 @@ A university final-year project (2026), built to become a product. **New here? S
 | Ranking model v1.0 | Chosen, measured on 13 test years, trained once on all data, saved, used every day |
 | Price ranges | Built and measured; shown in the dashboard and updated with the price during the day |
 | Dashboard | Built: three pages, daily and intraday updates, model rank, analyst views. Runs on one PC |
-| News sentiment | In testing: download built (Alpaca), not yet measured, not in the model |
+| News sentiment | Tested on 2018–2024: +0.003 rank IC, not distinguishable from chance; **not added** |
 | Crash risk, recovery odds, sector-neutral target | Code written, not yet measured on real data |
 | SEC 8-K event features | Filings downloaded and shown in the dashboard; features not written yet |
 | Live track record, chat assistant, hosted service with accounts | Not built |
-| 2025–26 holdout test | Locked; run once when the model is final |
+| 2025–26 holdout test | Model final; rules written before the run in [`docs/holdout-lock.md`](docs/holdout-lock.md); run once |
 
 ## What it does
 
@@ -56,7 +56,7 @@ For every S&P 500 stock, after each market close:
 |---|---|---|
 | **Rank against the market** | Where the stock stands among about 500 for the next 5 / 20 / 60 trading days, with the expected return above or below SPY | Neural net v1.0 |
 | **Track record for that rank** | How stocks ranked like this one did against SPY in 13 test years | Walk-forward test |
-| **Price ranges** | Ranges that should hold the price 1 time in 2, 4 times in 5 and 9 times in 10; wider when an earnings report falls inside the window | Volatility range model |
+| **Price ranges** | Ranges that should hold the price 1 time in 2, 4 times in 5 and 9 times in 10; wider when an earnings report falls inside the window. For the last day: the likely middle and how high and how low that day may trade | Volatility range model v2 |
 | **Today's price and live ranges** | Delayed prices while the US market is open; the ranges follow the price | Yahoo Finance |
 | **Company events** | SEC 8-K filings by type (earnings, restatement, executive change…) and the next expected earnings date | SEC EDGAR |
 | **What analysts expect** | 12-month price targets and buy / hold / sell counts, shown as opinions and not tested | Yahoo Finance |
@@ -94,7 +94,7 @@ Walk-forward backtest on the audited S&P 500 membership list: **722 stocks, test
 |---|---|---|
 | The ranking has a small, significant edge that held in most of 13 test years | **Yes** | Table above |
 | Low-ranked stocks tend to lag the market | **Yes** | Bottom 20% beat SPY only 47.7% of the time and trailed the top 20% by 0.46% per 20 days, in 11 of 13 years |
-| The "4 times in 5" price range holds the price about 4 times in 5 | **Yes** | 79.5% / 79.0% / 79.1% at 5 / 20 / 60 days, about 306,000 forecasts per horizon |
+| The "4 times in 5" price range holds the price about 4 times in 5 | **Yes** | 79.2% / 78.8% / 79.1% at 5 / 20 / 60 days, about 306,000 forecasts per horizon |
 | Top-ranked stocks beat the market | **No, not yet** | Top 20% beat SPY 49.9% of the time: they match it |
 | We predict whether a stock will go up | **No** | Tested; lost to the plain historical rate, dropped |
 | "X% accurate", or any return or profit figure | **No** | Not a provable claim; no trading strategy tested after costs |
@@ -111,7 +111,7 @@ One rule decided everything: a model or feature group stays only if it improves 
 |---|---|---|---|
 | Rank stocks against the market | **Neural net, average of 3 seeds ("v1.0")** | Input 44 features → 64 → 32 → 1, ReLU, dropout 0.1, Adam, up to 8 passes with early stopping. One model per horizon. Features are ranked across stocks on each day. Target: return minus SPY's, extreme 1% clipped per day. Each forecast is multiplied by a trust factor *k* between 0 and 1, learned from the latest training years | Rank IC 0.0149 / 0.0197 / 0.0199, t 3.07 / 3.18 / 2.23 |
 | Features | **Price and volume (17) + fundamentals (15) + sector (12)** | Momentum, reversal, volatility, beta; value, profitability, growth, earnings surprise from SEC filings; sector momentum and each stock's position inside its sector | Sectors gave the biggest single gain (0.0115 → 0.0140 on the early list) |
-| Price ranges | **Volatility range model** | Range centred on the price; width = blend of four volatility measures × a multiplier fitted on past windows, with a separate multiplier when an earnings report is expected | 80% range held 79.5% / 79.0% / 79.1%; in earnings windows 77–79% (a one-size range: 57%) |
+| Price ranges | **Volatility range model v2** | A regression forecasts each stock's volatility over the window (five volatility measures, the market's mood, expected earnings and the stock's typical earnings move); the range = price × exp(lower or upper multiplier × forecast × √days). Multipliers fitted on past windows, up and down separately, with separate ones when an earnings report is expected. 2.2% / 3.4% / 4.9% narrower than v1 at the same hit rate | 80% range held 79.5% / 79.0% / 79.1%; in earnings windows 77–79% (a one-size range: 57%) |
 | Baseline | **Random Walk** (forecast = no excess return) | Every model must beat it | Rank IC 0 by construction |
 | Second model for the holdout test | Ensemble of XGBoost + neural net, weighted by recent ranking skill | Declared before v1.0 was chosen, so both are scored once on the holdout | 0.0141 / 0.0173 / 0.0123 |
 
@@ -132,7 +132,7 @@ One rule decided everything: a model or feature group stays only if it improves 
 | Probability that a stock goes up | Brier 0.2513 vs 0.2446 for the plain historical rate | Loses to "stocks rose 57% of the time"; removed from the product |
 | Fine-tuning Kronos on US stocks | Not run | Published evidence shows little gain; finance-pretrained weights are tested instead |
 | TabPFN-2.5, Moirai 2.0, TiRex | Not run | Licences do not allow commercial use, or are unclear |
-| News from the direct Benzinga plan | About 2 articles a day market-wide | Too thin to compare stocks; replaced by Alpaca (in testing) |
+| News from the direct Benzinga plan | About 2 articles a day market-wide | Too thin to compare stocks; replaced by Alpaca (tested 17 Nov, not added) |
 
 The comparisons from LightGBM down to TimesFM were run on the earlier 466- and 634-stock lists; the choice of the neural net was then re-measured on the audited list and held at all three horizons. Full record, including the data error found on 12 Nov 2026: [`docs/decisions.md`](docs/decisions.md).
 
@@ -142,7 +142,7 @@ The comparisons from LightGBM down to TimesFM were run on the earlier 466- and 6
 
 | Item | What it is | Kept only if |
 |---|---|---|
-| News sentiment | Alpaca news (Benzinga articles, 2015 on) scored for tone, 8 features per stock per day | It beats v1.0 on test years 2018–2024 |
+| News sentiment | Alpaca news (Benzinga articles, 2015 on) scored for tone by FinBERT, 8 features per stock per day | +0.003 rank IC at 5 and 20 days on 2018–2024, paired t 1.29 / 0.83: not enough; v1.0 stays |
 | Sector-neutral target | Learn "beat your own sector fund" instead of "beat SPY" | It beats v1.0 |
 | Crash-risk model | Chance of a fall of more than 10% within 20 days | It beats a volatility-only model and is calibrated |
 | Recovery model | After a crash, how often and how fast stocks got back to the old price | It beats the plain historical rate |
@@ -162,7 +162,7 @@ flowchart LR
         MEM["S&P 500<br/>membership history"]
         SEC["SEC EDGAR<br/>fundamentals, 8-K filings"]
         YH["Yahoo Finance<br/>daily prices, analyst views"]
-        ALP["Alpaca news<br/>in testing"]
+        ALP["Alpaca news<br/>tested, not added"]
     end
     subgraph PC["The PC, Python 3.11+"]
         ING["Downloaders<br/>src/ingest"]
@@ -220,7 +220,7 @@ flowchart LR
 | 5 | Kaggle job runner | `scripts/kaggle_cloud.py`, `kaggle/` | Upload data, start a GPU job, fetch its output | `data/clean/`, repo code | `results/`, `models/` |
 | 6 | Daily model | `src/models/production.py`, `scripts/train_final.py`, `scripts/score_today.py` | Train v1.0 once and save it; rank every stock after each close with numpy only | `models/latticeiq_v1.npz`, research + daily prices, fundamentals | `data/live/rank.json`, `data/live/forecasts/<day>.csv` |
 | 7 | Daily price update | `src/ingest/live.py` | Latest closing prices (3 years) and delayed prices during the day | Yahoo | `data/live/prices.parquet` |
-| 8 | Range model | `src/models/vol_ranges.py` | 50 / 80 / 90% price ranges for 5 / 20 / 60 days, earnings-aware | Prices, filing dates | `data/live/range_fit.json` |
+| 8 | Range model | `src/models/vol_ranges.py` | 50 / 80 / 90% price ranges for 5 / 20 / 60 days, earnings-aware, plus the last day's likely middle, high and low | Prices (stocks and SPY), filing dates | `data/live/range_fit.json` |
 | 9 | Analyst views | `src/ingest/analysts.py` | Price targets and ratings for one stock, kept for a day, with a daily history | Yahoo | `data/live/analysts/<T>.json` |
 | 10 | Page data builder | `scripts/export_dashboard.py` | Turn prices, ranges, ranks, filings and test results into the files the page reads | 6, 7, 8, filings, `results/` | `app/data/index.json`, `stocks/<T>.json`, `track.json` |
 | 11 | Local web server | `scripts/run_dashboard.py` | Run updates on start and in the background; serve the page and three JSON endpoints | 6–10 | — |
@@ -258,7 +258,7 @@ Two rules shape this design:
 
 ### Server interface
 
-The server listens on `127.0.0.1:8600` only (this computer). All responses are JSON except the page files.
+The server listens on `127.0.0.1:8600` only (this computer) unless started with `--host`, which needs a login. With `LATTICEIQ_PASSWORD` set, every request needs that password (HTTP Basic, any user name; 401 otherwise); on a server it sits behind Caddy, which adds HTTPS. All responses are JSON except the page files.
 
 | Request | Returns |
 |---|---|
@@ -282,7 +282,7 @@ Nothing here is committed to the repo: price and news data are licensed, and the
 | `models/latticeiq_v1.npz` | The saved model | Weights of 3 nets × 3 horizons, feature list, *k* per horizon, last training date | On retraining |
 | `data/live/rank.json` | Today's ranking | asof, model, per stock and horizon: position, percentile, expected excess return | After every close |
 | `data/live/forecasts/<day>.csv` | A stock's forecast made that day | asof, ticker, horizon, score, pct, pos, n, expected_excess, close | Appended daily, never changed |
-| `data/live/range_fit.json` | Fitted range multipliers | Per horizon, level, earnings or not | When the range model changes |
+| `data/live/range_fit.json` | Fitted range weights and multipliers, and the 2012–2024 replay | Per horizon: regression weights; lower and upper multiplier per level, earnings or not; the day's middle, high and low | When the range model or its data changes |
 | `app/data/index.json`, `stocks/<T>.json`, `track.json` | What the page shows | Per stock: price, ranges, rank, candles, earnings, filings; test results by year | After every close |
 | `results/<run>/` | One experiment | Settings, metrics by year, rank groups (predictions not committed) | Per experiment |
 
@@ -320,7 +320,7 @@ Outside systems: Yahoo Finance, SEC EDGAR, Tiingo, Alpaca, Kaggle, a logo servic
 |---|---|---|
 | FR-1 | download the latest closing prices for every current S&P 500 member, 15 market and sector funds and former members that still trade, whenever a newer trading day exists | Built |
 | FR-2 | show delayed prices while the US market is open: the stock on screen every 20 seconds, all stocks every 10 minutes | Built |
-| FR-3 | give, for each stock and for 5, 20 and 60 trading days, three price ranges (1 in 2, 4 in 5, 9 in 10), widened when an earnings report is expected inside the window | Built |
+| FR-3 | give, for each stock and for 5, 20 and 60 trading days, three price ranges (1 in 2, 4 in 5, 9 in 10), widened when an earnings report is expected inside the window, and for the last day the likely middle, a high it should stay below and a low it should stay above (each 9 times in 10) | Built |
 | FR-4 | move the ranges with the price during the day, sized for the time left to the same end date, and show the range made at the close next to them | Built |
 | FR-5 | rank every stock against the market for 5, 20 and 60 days after each close with the saved model, and show the position, the expected return versus SPY and what that part of the ranking did in testing | Built |
 | FR-6 | write every day's forecasts to a dated log before their outcomes are known | Built |
@@ -344,13 +344,13 @@ Outside systems: Yahoo Finance, SEC EDGAR, Tiingo, Alpaca, Kaggle, a logo servic
 
 | ID | Requirement | How it is met or checked |
 |---|---|---|
-| NFR-1 | **No look-ahead.** A feature on day *t* uses only what was public by the close of *t* | Filing dates, first-filed values, index membership on that day, news after 4 pm counted for the next day; 43 automated tests, including "random data must show no skill" and "a planted signal must be found" |
+| NFR-1 | **No look-ahead.** A feature on day *t* uses only what was public by the close of *t* | Filing dates, first-filed values, index membership on that day, news after 4 pm counted for the next day; 47 automated tests, including "random data must show no skill" and "a planted signal must be found" |
 | NFR-2 | **Honest evaluation.** Every published number comes from the walk-forward test or the locked holdout | 60-day gap between training and test; same weekly dates for every model; holdout from 1 Jan 2025 excluded in code |
 | NFR-3 | **Honest wording.** No buy or sell calls, no accuracy percentage, no profit figure; "not investment advice" on the page | Track record page; claims table above |
 | NFR-4 | **Speed.** Price update about a minute; ranking under a minute; page data about 10 seconds; price on screen at most 20 seconds old plus the source's delay of up to 15 minutes | Measured on the development PC |
 | NFR-5 | **Keeps working.** A failed download never stops the dashboard; old prices are kept if most tickers fail; a failing analyst request affects only its card | Handled in `run_dashboard.py`, `live.py`, `analysts.py`; tests |
 | NFR-6 | **Same result twice.** Fixed random seeds, settings in one file, research data frozen, each run saved with its settings | `config/settings.yaml`, `results/` |
-| NFR-7 | **Private and local.** The server accepts connections from this computer only; no accounts and no personal data; API keys only in `.env` | `127.0.0.1` binding; `.gitignore` |
+| NFR-7 | **Private.** On the PC the server accepts connections from this computer only; on a server every request needs the password and travels over HTTPS; no accounts and no personal data; API keys and the password only in `.env` | `127.0.0.1` binding; refuses `--host` without a password; Caddy HTTPS; `.gitignore`; login test |
 | NFR-8 | **Runs on an ordinary PC.** Daily use needs no GPU and no PyTorch | NumPy scoring from saved weights |
 | NFR-9 | **Easy to change safely.** One feature code path for research and daily use; tests on every push | GitHub Actions |
 | NFR-10 | **Usable.** Light and dark themes, works at laptop and phone widths, keyboard search and stepping | Checked by screenshot at several sizes |
@@ -360,7 +360,7 @@ Outside systems: Yahoo Finance, SEC EDGAR, Tiingo, Alpaca, Kaggle, a logo servic
 - S&P 500 stocks only; US regular market hours; market holidays are not known to the system (on a holiday it finds no new prices).
 - Free data: Yahoo and Tiingo prices are for research and personal use, and prices can be delayed by up to 15 minutes. A commercial launch needs a licensed feed keyed by a permanent security ID.
 - The sentiment scorer under test (FinBERT) is non-commercial; logos are trademarks loaded from an outside service, not stored.
-- One user on one PC. No hosted version, no accounts, no mobile app.
+- One shared password, no per-person accounts, no mobile app. The hosted version is one server with no standby copy.
 - Fundamentals are as of the last download; a weekly refresh is not automated yet.
 - The intraday ranges are the closing ranges re-centred, not a separately tested model.
 
@@ -426,7 +426,7 @@ The numbers are not directly comparable: marketing figures cover top picks in a 
   <img alt="Average width of the 80% price range for a 100 dollar stock: plus or minus 4.7% over 5 days, 9.9% over 20 days, 17.6% over 60 days; the real price fell inside about 80% of the time at each horizon" src="docs/assets/horizons_light.png" width="100%">
 </picture>
 
-**Price ranges.** The two charts above show the first range model (quantile XGBoost, earlier 634-stock list): its 80% range held 79.8% / 80.3% / 80.2% of the time at 5 / 20 / 60 days (naive normal model: 79.3% / 77.5% / 76.5%). The volatility range model now in the dashboard held 79.5% / 79.0% / 79.1% with a typical width of ±4.6% / ±9.5% / ±16.6%, and 77–79% in earnings weeks where a one-size range holds only 57%. A side-by-side run of both on the audited list is still to do.
+**Price ranges.** The two charts above show the first range model (quantile XGBoost, earlier 634-stock list): its 80% range held 79.8% / 80.3% / 80.2% of the time at 5 / 20 / 60 days (naive normal model: 79.3% / 77.5% / 76.5%). The volatility range model now in the dashboard (v2, 17 Nov) held 79.2% / 78.8% / 79.1% with a typical width of ±4.5% / ±9.2% / ±16.0%, 2.2% / 3.4% / 4.9% narrower than v1 (79.5% / 79.0% / 79.1%), and 77–79% in earnings weeks where a one-size range holds only 57%. A side-by-side run of both on the audited list is still to do.
 
 A rank IC of 0.01–0.05 is typical for honest stock forecasting. All tables and limitations: [`docs/results.md`](docs/results.md).
 
@@ -468,6 +468,8 @@ Each start downloads the latest closing prices (about a minute, only when a newe
 
 Details of every part of the page: [`app/README.md`](app/README.md).
 
+**On a server.** The same program runs on one small AWS Lightsail server (about $7 a month) behind HTTPS with a password: `deploy/aws/setup.sh` installs it, and [`deploy/aws/README.md`](deploy/aws/README.md) has the steps. The site stays private because the price data and FinBERT are licensed for research only.
+
 ## Repository layout
 
 ```
@@ -491,6 +493,7 @@ LatticeX/
 │                      export_dashboard (build page data), run_dashboard (local server)
 ├── app/               the dashboard (plain HTML, CSS and JavaScript; page data built locally, not committed)
 ├── kaggle/            code that runs inside Kaggle notebooks
+├── deploy/aws/        put the dashboard on an AWS server: setup script, service, HTTPS, data upload
 ├── tests/             leakage and correctness tests (run on every push by GitHub Actions)
 ├── results/           experiment summaries (metrics CSV/JSON; predictions are not committed)
 ├── data/              not committed: rebuilt by the download scripts (see data/README.md)
@@ -501,7 +504,7 @@ LatticeX/
 | Doc | Use it for |
 |---|---|
 | [`docs/project-flow.md`](docs/project-flow.md) | **Start here.** The project step by step: what was done, why, the result, the evidence, and what is next |
-| [`docs/methodology.md`](docs/methodology.md) | **The methods in plain words, with the published research behind each one** (36 references) |
+| [`docs/methodology.md`](docs/methodology.md) | **The methods in plain words, with the published research behind each one** (38 references) |
 | [`docs/architecture.md`](docs/architecture.md) | Design detail: pipeline, evaluation rules, look-ahead rules, daily model, range model, server |
 | [`docs/decisions.md`](docs/decisions.md) | **Which models and features are in or out, and why**; data errors found and fixed; product decisions |
 | [`docs/results.md`](docs/results.md) | All results tables and limitations |
@@ -514,7 +517,7 @@ LatticeX/
 
 ## Roadmap
 
-- **Now:** test news sentiment and SEC event features against v1.0; price ranges on the audited list; crash-risk and recovery runs; sector-neutral target; a finance-pretrained model (FinText) as an extra input. Each is kept only if it beats v1.0 on the same test years.
+- **Now:** news sentiment tested and not added (17 Nov); next insider purchases (SEC Form 4) and SEC event features against v1.0; price ranges on the audited list; crash-risk and recovery runs; sector-neutral target; a finance-pretrained model (FinText) as an extra input. Each is kept only if it beats v1.0 on the same test years.
 - **Next:** live record from the daily forecast log, weekly refresh of fundamentals, chat assistant, one-time 2025–26 holdout test.
 - **Before a launch:** licensed price data keyed by a permanent security ID (free data is research-only), a commercially licensed sentiment model, hosting with accounts, legal review of every performance statement.
 

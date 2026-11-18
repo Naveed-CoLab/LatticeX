@@ -4,6 +4,7 @@
 !.env.example
 kaggle.json
 **/kaggle.json
+*.pem
 Claude outputs/
 
 # ---- Data: too large and licensed (Tiingo, Benzinga) -> rebuild with scripts ----

@@ -4,6 +4,7 @@
     python -m scripts.run_dashboard --no-update   open with the data already on disk (no internet needed)
     python -m scripts.run_dashboard --refresh     rebuild the dashboard data even if nothing changed
     python -m scripts.run_dashboard --port 8700
+    python -m scripts.run_dashboard --no-browser  on a server (see deploy/aws/README.md)
 
 Every start checks whether a newer closing day should exist (US markets close at 4 pm New York time) and, if
 so, downloads it (about a minute) and the SEC filings since the last check (a few minutes, once a day).
@@ -14,12 +15,19 @@ day by itself. The forecasts are always made from the last finished close; today
 Opening a stock also fetches what analysts expect for it (12-month price targets and ratings), once a day.
 If a trained model is saved (models/latticeiq_v1.npz, see scripts/train_final.py), every stock is ranked with it
 after each close and the rank is shown on the page.
-Runs on this computer only. Stop it with Ctrl+C.
+Runs on this computer only (127.0.0.1) unless --host says otherwise. Stop it with Ctrl+C.
+
+Login: if LATTICEIQ_PASSWORD is set (in .env or the environment), every page and data request needs that
+password (the browser asks for it once; any user name works). Required with --host other than 127.0.0.1. On a
+server, put a web server with HTTPS in front (deploy/aws/), so the password never travels unencrypted.
 """
 import argparse
+import base64
 import functools
+import hmac
 import http.server
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -100,10 +108,43 @@ def keep_current(tickers: list) -> None:
         time.sleep(60)
 
 
+def authorized(header: str | None, password: str) -> bool:
+    """True if no password is set, or the request's Basic login carries it (any user name)."""
+    if not password:
+        return True
+    if not header or not header.startswith("Basic "):
+        return False
+    try:
+        given = base64.b64decode(header[6:], validate=True).decode("utf-8").partition(":")[2]
+    except (ValueError, UnicodeDecodeError):
+        return False
+    return hmac.compare_digest(given.encode("utf-8"), password.encode("utf-8"))
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     tickers = frozenset()
+    password = ""
+
+    def locked(self) -> bool:
+        """Ask for the password and return True if this request does not carry it."""
+        if authorized(self.headers.get("Authorization"), self.password):
+            return False
+        body = b"Login required."
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="LatticeIQ", charset="UTF-8"')
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
+    def do_HEAD(self):
+        if not self.locked():
+            super().do_HEAD()
 
     def do_GET(self):
+        if self.locked():
+            return
         url = urllib.parse.urlparse(self.path)
         if url.path == "/api/today":
             return self.send_json(today_payload())
@@ -159,7 +200,9 @@ def update_scores() -> bool:
         if meta and meta.get("created") == ranked_with:
             return False
     print("Ranking today's stocks with the saved model (under a minute)", flush=True)
-    return production.score() is not None
+    # in its own process: building the features needs about 1.8 GB for a minute, which is then handed back
+    # (in this long-running process it would stay taken, and a small server would have to swap)
+    return subprocess.run([sys.executable, "-m", "scripts.score_today"], cwd=ROOT, check=True).returncode == 0
 
 
 def update_filings() -> bool:
@@ -168,7 +211,11 @@ def update_filings() -> bool:
     new, old = path("clean") / "sec_events_latest.parquet", path("clean") / "sec_events.parquet"
     if not old.exists():
         return False
-    have_codes = (ROOT / "data" / "live" / "companies.json").exists()      # industry codes for the sector filter
+    codes = ROOT / "data" / "live" / "companies.json"                     # industry codes for the sector filter
+    try:
+        have_codes = len(json.loads(codes.read_text(encoding="utf-8"))) >= 450 if codes.exists() else False
+    except ValueError:
+        have_codes = False
     if new.exists() and have_codes and time.time() - new.stat().st_mtime < FILINGS_EVERY_HOURS * 3600:
         return False
     from src.ingest import sec_events
@@ -197,8 +244,12 @@ def main() -> None:
     ap.add_argument("--no-update", action="store_true", help="do not download anything; use the data on disk")
     ap.add_argument("--refresh", action="store_true", help="rebuild app/data even if nothing changed")
     ap.add_argument("--port", type=int, default=8600)
+    ap.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this computer only)")
     ap.add_argument("--no-browser", action="store_true")
     a = ap.parse_args()
+    Handler.password = os.getenv("LATTICEIQ_PASSWORD", "")
+    if a.host not in ("127.0.0.1", "localhost", "::1") and not Handler.password:
+        raise SystemExit("Refusing to listen on other machines without a login. Set LATTICEIQ_PASSWORD in .env first.")
 
     if not a.no_update:
         for name, step in (("Price", update_prices), ("Filings", update_filings), ("Model ranking", update_scores)):
@@ -222,8 +273,9 @@ def main() -> None:
         except Exception as e:
             print(f"Today's prices are off ({e!r:.120}).")
     url = f"http://localhost:{a.port}/"
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), functools.partial(Handler, directory=str(APP)))
-    print(f"\nLatticeIQ dashboard is running: {url}\nKeep this window open while you use it. Press Ctrl+C here to stop.")
+    server = http.server.ThreadingHTTPServer((a.host, a.port), functools.partial(Handler, directory=str(APP)))
+    print(f"\nLatticeIQ dashboard is running: {url}" + ("  (login required)" if Handler.password else "") +
+          "\nKeep this window open while you use it. Press Ctrl+C here to stop.", flush=True)
     if not a.no_browser:
         webbrowser.open(url)
     try:

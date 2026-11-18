@@ -4,7 +4,7 @@ What we tried, what it scored, and whether it is **in**, **out** or **pending** 
 
 **Rule for every decision:** a component stays only if it improves rank IC on the walk-forward test years 2012–2024 *consistently* (in most years, not just on average). Everything is compared on the same stocks, the same weekly dates and the same metrics; since 14 Nov that is the audited list "universe v2" (722 stocks). The 2025–26 holdout is never used for decisions.
 
-**Current state in one line:** the ranking model is **v1.0, a neural net averaged over 3 seeds** (section below); price ranges in the product come from the **volatility range model**; news sentiment is being tested. Rows further down that say "final" for an earlier model are kept as the record of how the choice was made, and are marked *replaced*.
+**Current state in one line:** the ranking model is **v1.0, a neural net averaged over 3 seeds** (section below); price ranges in the product come from the **volatility range model**; news sentiment was tested on 17 Nov and **not adopted** (small gain (+0.003 rank IC at 5 and 20 days, 2018–2024) that is not distinguishable from chance (paired t 1.29 and 0.83); v1.0 stays). Rows further down that say "final" for an earlier model are kept as the record of how the choice was made, and are marked *replaced*.
 
 ## ⚠ Data error found 12 Nov 2026: the stock list stopped in January 2019
 
@@ -76,7 +76,7 @@ flowchart LR
     C -->|+ Kronos: 0.0147, noise ✗| X3[Kronos OUT]
     C -->|+ TimesFM: 0.0128 ✗| X4[TimesFM OUT]
     C -->|ensemble XGBoost + MLP, trust-weighted| E[0.0170–0.0199<br/>later replaced by the neural net alone = v1.0]
-    C -->|+ news| P2[in testing: Alpaca news]
+    C -->|+ news: +0.003, t 1.3 / 0.8 ✗| X5[news OUT for now]
 ```
 
 ## Models
@@ -116,12 +116,40 @@ flowchart LR
 | **Recovery model** (new output) | **PENDING — Kaggle run** | After a crash (drop of 10%+ in 5 days): history table of how often and how fast stocks got back to the pre-drop price (by crash type), plus P(recover within 60 / 20 days) from what is known on the crash day | Base rate and a drop-size-only logistic model; must be calibrated |
 | **Official company news: SEC 8-K events** | **data downloaded** (170,000 filings since 2001, shown in the dashboard); features not written yet | Every 8-K since ~2001 with its event type (earnings, restatement, CEO change, write-down, bankruptcy…), time-stamped. Same source gives history (to back-test as features) and a live feed (`--latest`) | Features must beat v1.0; live feed is shown as alerts until then |
 | **Sharper price ranges** | **v1 built and measured (15 Nov), in the dashboard** — see the row below; Kaggle comparison with the quantile model still to run | Goal: the narrowest range that is still right as often as it says. Quick checks on our prices (5 days, 80% level, 2012–2024): (1) blending range-based (Garman-Klass), 60-day, 250-day and EWMA volatility gives ranges **5% narrower** at the same hit rate than 20-day volatility alone; (2) in weeks with an earnings report a one-size range holds the price only **57%** of the time (81% in other weeks) → make ranges earnings-aware: wider in earnings weeks, about 3–4% narrower otherwise; (3) adaptive conformal calibration so coverage recovers quickly in shocks like 2020; (4) score with the interval (Winkler) score, which rewards narrow and punishes misses | Current quantile-XGBoost ranges on universe v2: same or better coverage, lower interval score, and ≥ 75% coverage in earnings weeks |
-| **Volatility range model** (`src/models/vol_ranges.py`) | **IN the dashboard** | Range centred on today's price; width = blended volatility (range-based, 60-day, 250-day, recent-weighted) × a multiplier fitted on past windows, separate for windows with an expected earnings report. Walk-forward 2012–2024, about 306,000 forecasts per horizon: the 80% range held **79.5% / 79.0% / 79.1%** at 5 / 20 / 60 days with average width **9.2% / 19.0% / 33.3%**; in earnings windows 77.3% / 78.2% / 79.3%. The quantile-XGBoost ranges on the earlier list: 79.8% / 80.3% / 80.2% at width 9.4% / 19.8% / 35.1%. So: a little narrower, a little under target, far simpler, and no longer blind in earnings weeks | Decide between the two (or blend) after both run on universe v2 with the interval score |
+| **Volatility range model** (`src/models/vol_ranges.py`) | v1 **replaced** by v2 on 17 Nov (row below) | Range centred on today's price; width = blended volatility (range-based, 60-day, 250-day, recent-weighted) × a multiplier fitted on past windows, separate for windows with an expected earnings report. Walk-forward 2012–2024, about 306,000 forecasts per horizon: the 80% range held **79.5% / 79.0% / 79.1%** at 5 / 20 / 60 days with average width **9.2% / 19.0% / 33.3%**; in earnings windows 77.3% / 78.2% / 79.3%. The quantile-XGBoost ranges on the earlier list: 79.8% / 80.3% / 80.2% at width 9.4% / 19.8% / 35.1%. So: a little narrower, a little under target, far simpler, and no longer blind in earnings weeks | Decide between the two (or blend) after both run on universe v2 with the interval score |
 | Option-implied volatility | later | The options market's own forecast of each stock's movement; the strongest known input for range width. No free source with history found yet | Ranges above |
 | Insider trading (SEC Form 4) | next | Executives' own buying/selling | v1.0 |
 | **Finance-pretrained Chronos (FinText)** | next, after the rebuild | Chronos-Small trained from scratch on US daily excess returns, one version per year (Apache-2.0). For test year Y we use the version trained to Y−1, so no look-ahead. Tested alone and as 2–3 extra inputs to the MLP | v1.0; kept only if the gain holds in most of the 13 years |
 | Short interest (FINRA) | later | How heavily a stock is bet against | v1.0 |
-| News headlines + sentiment | **IN TESTING** | Headlines scored by a language model; Alpaca news from 2015 gives history to back-test; download built 16 Nov | — |
+| News headlines + sentiment | **NOT ADOPTED** (17 Nov) | Headlines scored by FinBERT; Alpaca news from 2015. Small gain (+0.003 rank IC at 5 and 20 days, 2018–2024) that is not distinguishable from chance (paired t 1.29 and 0.83); v1.0 stays (results.md 5e) | — |
+
+## Improvement search (17 Nov 2026): what research and data could still help
+
+v1.0 stays locked. Each idea below is tested against it on the same years and kept only if it beats it by more than chance in most years; if nothing does, v1.0 stays the model.
+
+**For the ranking (which stocks beat the market):**
+
+| Idea | Evidence | Data, cost | Fits our horizons? | Order |
+|---|---|---|---|---|
+| News sentiment (FinBERT) | Media tone predicts short-term returns (Tetlock 2007) | Alpaca/Benzinga, downloaded and scored | Mostly 1–5 days | **Tested 17 Nov: not adopted** (+0.003, paired t 1.29 at 5 days, 0.83 at 20; results.md 5e) |
+| Sentiment from a stronger language model | Kirtac & Germano (2024): OPT beat FinBERT (3-day direction accuracy 74.4% vs 72.2%; long-short Sharpe 3.05 vs 2.07, before costs). Lopez-Lira & Tang: GPT-4 headline scores predict the next two days, not after; the effect shrank from 2021 to 2023 | Same news; compute on Kaggle | 5 days at most | **Not tried:** FinBERT news did not pass the bar, and this was conditional on it |
+| Insider purchases (SEC Form 4) | Free EDGAR study, 2022–2026: +0.5% after 1 day, +1.0% after 5 days (t ≈ 5–6), nothing reliable after a month | SEC Insider Transactions Data Sets, free | 5 days | Next |
+| SEC 8-K events | Our own filings data | Downloaded | 5–20 days | Next |
+| Short interest | Classic predictor: heavily shorted stocks tend to lag | FINRA, twice a month; cost and history depth to confirm | 20–60 days | After the above |
+| Sector-neutral target | Removes sector swings from what the model learns | Code ready | All | Queued |
+| Finance-pretrained forecaster (FinText) | Rahimikia et al. (2025) | Free weights | All | Queued |
+| Option-implied signals (volatility skew, implied-vs-realised spread) | The strongest known group in research (e.g. volatility skew, t ≈ 8.6 at 12 months in Doshi, Luo & Yae) | Needs options history: Alpaca starts only in Feb 2024 and history is paid; OptionMetrics through a university WRDS subscription | All | If WRDS access exists |
+| 200+ published predictors (Open Source Asset Pricing) | Chen & Zimmermann: replicated library of signals | Free files on Hugging Face, but keyed to CRSP identifiers and partly CRSP-based | All | If WRDS access exists |
+
+**For the price ranges (narrower at the same hit rate):**
+
+| Idea | Evidence | Data | Order |
+|---|---|---|---|
+| News counts | Bodilsen & Lunde (2025): the count of overnight firm news improves next-period volatility forecasts; macro-news tone helps at longer horizons | Downloaded | Next |
+| Implied volatility | The market's own forecast of each stock's swings, generally the strongest volatility predictor | Options history (WRDS OptionMetrics) | If WRDS access exists |
+| Confirmed earnings dates | Avoids widening for earnings that are not in the window | An earnings calendar source | Later |
+
+**One question decides the top of this list:** if the university has WRDS, it gives (for academic use only) delisting-safe prices (CRSP), company accounts (Compustat), analyst estimate history (I/B/E/S), and option-implied volatility (OptionMetrics). Those are the data behind most published results and would also fix the free-data gaps listed in `data-sources.md`.
 
 ## Feature groups
 
@@ -131,7 +159,7 @@ flowchart LR
 | Macro (8: VIX, yields, spreads, CPI…) | **OUT** | IC 0.0118 (t 0.99) vs 0.0128 | Same value for every stock on a date, so it cannot help rank stocks |
 | Fundamentals (15, SEC EDGAR) | **IN** | 0.0115 alone, 0.0140 with sectors | Helps in combination with sector-relative features |
 | Sector features (12) | **IN** | 0.0115 → 0.0140 | Biggest single gain; compares stocks within their sector |
-| News sentiment (FinBERT on headlines) | **IN TESTING** | — | The direct Benzinga plan gave ~2 articles a day (too sparse). Alpaca's news API gives 435–1,144 a day from 2015; download built 16 Nov, comparison with v1.0 on 2018–2024 next. FinBERT licence is non-commercial |
+| News sentiment (FinBERT on headlines) | **OUT for now** (17 Nov) | 5 d 0.0142 vs 0.0111; 20 d 0.0125 vs 0.0099 (2018–2024) | Gain not distinguishable from chance: paired t 1.29 / 0.83, about twice the gap between two runs of the same model; worse in 3 of 7 years at 20 days; top and bottom fifths no better. Code kept for a retest. FinBERT licence is non-commercial anyway |
 | Kronos forecasts (2) | **OUT** | see Models | No reliable gain |
 | TimesFM forecasts (3) | **OUT** | 0.0140 → 0.0128 | Hurts ranking; see Models |
 
@@ -195,7 +223,7 @@ Compared with what other tools advertise: [`market-comparison.md`](market-compar
 | "The ranking separates weaker from stronger stocks" | Top 20% beat bottom 20% by 0.12% / 0.46% / 0.76%, in 11 / 11 / 10 of 13 years | Yes |
 | "Low-ranked stocks tend to lag the market" | Bottom 20% beat SPY only 48.4% / 47.7% / 47.4% of the time | Yes |
 | "Top-ranked stocks beat the market" | Top 20% beat SPY 50.2% / 49.9% / 50.1% of the time | **No** — they roughly match it |
-| "The 80% price range is right 80% of the time" | Volatility range model (in the product): 79.5% / 79.0% / 79.1%; first model: 79.8% / 80.3% / 80.2% (earlier list) | Yes |
+| "The 80% price range is right 80% of the time" | Volatility range model v2 (in the product): 79.2% / 78.8% / 79.1%; v1: 79.5% / 79.0% / 79.1%; first model: 79.8% / 80.3% / 80.2% (earlier list) | Yes |
 | "We predict whether a stock goes up" | P(up) lost to the base rate | **No** |
 | "X% accurate" or any profit figure | No trading strategy tested after costs | **No** |
 
@@ -203,11 +231,15 @@ Compared with what other tools advertise: [`market-comparison.md`](market-compar
 
 | Decision | Why |
 |---|---|
+| Host the dashboard on one AWS Lightsail server (Sydney, 1 GB, $7 a month) behind HTTPS (Caddy) with one shared password (17 Nov) | Same program as on the PC, so nothing new to test; fits the $10 budget. Measured: page build 0.7 GB peak, daily ranking 1.7–1.8 GB for about a minute (run in its own process, swap covers it). Private because Yahoo prices and FinBERT are research-only. Per-person logins (Cloudflare Access) and a licensed price feed come before any wider access |
 | Chat app (planned): user sends a ticker or a chart screenshot (e.g. TradingView), an LLM reads it and answers using **our model's** forecast | The LLM is only the interface (reads the image, explains in plain words). The forecast comes from our tested model, not from the LLM guessing from a picture |
 | The screenshot is used to identify the stock and timeframe, not as the prediction input | A chart image holds less information than the price data we already have; image "pattern reading" is not reliable or testable |
 | Every answer shows rank, price range, top drivers and the model's backtest record (no probability of going up: it was tested and dropped), plus "not investment advice" | Honest, explainable output builds trust; US rules on investment advice |
 | Accuracy claims are only from walk-forward backtests and the locked holdout | Claims of 70–90% stock "accuracy" almost always come from look-ahead bias |
 
+| **Volatility range model v2**: volatility forecast by regression (incl. market mood) + uneven up/down (17 Nov), **IN the dashboard** | Replayed in the product code on the same 306,000 stock forecasts per horizon as v1: 80% range held 79.2% / 78.8% / 79.1% (v1 79.5% / 79.0% / 79.1%), **2.2% / 3.4% / 4.9% narrower**; interval score better by 1.0% / 1.7% / 2.2% and in 11, 11 and 10 of 13 years; worst year 75.8→77.4%, 75.9→76.6%, 73.3→75.6% (results.md 5d) | Rejected in the same test: 18 multiplier groups (narrower by missing more), last-year adaptive blend (worse), separate multipliers for short-history stocks (worse) |
+| Day's likely middle, high and low for the target day (17 Nov), **IN the dashboard** | "High below X" held 89.6% / 89.0% / 88.7%, "low above Y" 89.6% / 90.1% / 90.5% at 5 / 20 / 60 days, aimed at 90% | Shown next to the close range, not instead of it; on the stock page and the Track record page |
+| One range by default on the stock page: the 80% range, "right 4 times in 5" (17 Nov) | Three ranges at once confused readers. 80% balances width and certainty and is the best-tested level (held 79.5% / 79.0% / 79.1%) | The 50% and 90% ranges are one click away and remembered; the API and the Track record keep all three |
 | Ranges follow the price during the day (16 Nov), replacing "ranges stay fixed until the close" from earlier the same day | The product has to react to today's price. Keeping the width and only moving the centre would be slightly too narrow or too wide; instead the range made at the close is re-centred on the price now and sized for the time left to the same end date, half-width × √(days left ÷ days in window) | Slightly wide just after the open (the overnight move has already happened), exact at the close. Not a separately tested model: the track record still describes ranges made at the close, and the page says so |
 
 | The model in daily use is v1.0 trained once on every date whose outcome is known, then only scored each day (16 Nov) | One more day of data does not change what 25 years taught it; retraining monthly or quarterly is enough. Scoring runs in numpy from saved weights, so the PC needs no PyTorch | The daily model also learns from 2025–26. That period is still not used to test or choose anything: the one-time holdout test trains its own model on data to 2024 |

@@ -25,7 +25,7 @@ While the dashboard is running and the US market is open (9:30 am to 4 pm New Yo
 
 The big price becomes today's price, with the last close underneath. Before the market opens the page says when it opens in your local time and shows the last close, because no newer price exists yet. Prices come from Yahoo and can be delayed by up to 15 minutes; quotes to the second need a paid or broker feed.
 
-**The ranges follow the price.** Each range is made at the last close. While the market is open the page moves it to the price now and sizes it for the trading time left to the same end date (half-width × √(days left ÷ days in the window)), so the three ranges, the cone on the chart and the ladder update with every new price. The line under the three ranges shows what the range was at the close. The track record was measured on ranges made at the close; the live version is the same range re-centred, not a separately tested model.
+**The ranges follow the price.** Each range is made at the last close. While the market is open the page moves it to the price now and sizes it for the trading time left to the same end date (each side's distance from the price × √(days left ÷ days in the window)), so the three ranges, the target day's middle, high and low, the cone on the chart and the ladder update with every new price. The line under the three ranges shows what the range was at the close. The track record was measured on ranges made at the close; the live version is the same range re-centred, not a separately tested model.
 
 About 20 minutes after the close the dashboard downloads the finished day, rebuilds every forecast from it and the page reloads itself, so it can be left running. `start_dashboard.bat` in the project folder starts it in a minimised window with a double-click.
 
@@ -50,8 +50,10 @@ On each stock page, **Against the market** (the model's rank for 5, 20 and 60 da
 - **Line or candles.** A line with a soft fill by default (green when the chosen period is up, red when it is down) or candles; the choice is remembered.
 - **Period.** 1 week to 1 year of history. The line above the chart gives the change over that period and its highest and lowest close; the same high and low are marked on the chart.
 - **Earnings.** An "E" marks each past earnings report; a dashed amber line marks the next expected one when it falls inside the look-ahead.
-- **The cone.** The likely range ahead: the darkest band is right half the time, the middle one 4 times in 5, the lightest 9 times in 10. The key under the chart says the same.
+- **The cone.** The likely range ahead, right about 4 times in 5 (the 80% range). One range is shown by default so the page is easy to read; "Show 50% and 90% ranges" under the chart or in the side panel adds the narrower range (right half the time) and the wider one (right 9 times in 10). The choice is remembered in the browser, and the API and the Track record page always keep all three.
+- **Uneven sides.** Each side of a range is fitted on its own, so the range sits a little above today's price (prices have tended to drift up); the cards and the side panel show it as down / up, e.g. −8.4% / +9.8%. A dotted line in the cone is the likely middle.
 - **Pointing at it.** A floating label shows the price and day's change for a past day, today so far, or the likely range on a future day; the price and date also appear on the axes.
+- **On the day itself** (side panel, under the ranges): for the last day of the chosen look-ahead, the likely middle for the close, a high the day should stay below and a low it should stay above, each right about 9 times in 10, with how often that held on 2012–2024. The Track record page has the same table for all three look-aheads.
 - **Buttons.** The bars button shows or hides volume (remembered). The corner button opens the chart across the whole window; Esc or the same button closes it.
 - While the market is open the end of the line pulses and a dotted line marks the price now.
 
@@ -66,6 +68,18 @@ Each stock page has a card in the style of the price-target pages on the big fin
 - The numbers come from Yahoo Finance and are fetched when you open a stock, once a day per stock (`src/ingest/analysts.py`, saved under `data/live/analysts/`). Check one from the terminal with `python -m src.ingest.analysts NVDA`.
 - **They are analysts' opinions, not LatticeIQ forecasts.** LatticeIQ has not tested how often they come true, and the page says so. Yahoo only gives today's consensus, so each day's numbers are kept in a small history; after a few months that history can be used to test whether targets or rating changes say anything about returns.
 - If Yahoo has nothing for a stock, or the request fails, the card says so; the rest of the page does not depend on it.
+
+## The LatticeIQ logo
+
+The mark is three candlesticks (the past: hollow = closed up, filled = closed down) running into the forecast cone (the likely range ahead, widening with the square root of time in the chart's three band strengths). It is the picture the dashboard draws for every stock, reduced to a few shapes. The wordmark is Archivo: "Lattice" wide and heavy, "IQ" narrow and light.
+
+| File | Use |
+|---|---|
+| `app/favicon.svg` | Browser-tab icon (two candles on a blue tile, readable at 16 px) |
+| `docs/assets/logo.svg`, `logo_dark.svg` | Mark and name, for light and dark backgrounds (slides, report, README); the letters are outlines, so no font is needed |
+| `docs/assets/logo_mark.svg`, `logo_mark_dark.svg` | The mark alone |
+
+In the page header the mark is drawn inline in the page's own colours, so it follows the light and dark themes.
 
 ## Company logos
 

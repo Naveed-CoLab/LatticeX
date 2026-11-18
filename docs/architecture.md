@@ -125,7 +125,7 @@ Tested and not used: macro (8, `macro.py`), Kronos forecasts (2) and TimesFM for
 | Macro (FRED) | Each value usable only from its release date (ALFRED vintages); market series the next day |
 | Kronos, TimesFM | Forecast made at *t* from data up to *t*, carried forward at most 31 days, never backwards |
 
-Each rule has a test in `tests/test_pipeline.py` (43 tests). The two key sanity tests:
+Each rule has a test in `tests/test_pipeline.py` (47 tests). The two key sanity tests:
 
 - **Random data → no skill.** On pure noise the model must show a rank IC t-statistic near 0. A "win" here means leakage.
 - **Planted signal → found.** On data with a built-in momentum effect, the model must find it (t > 3).
@@ -134,13 +134,17 @@ Each rule has a test in `tests/test_pipeline.py` (43 tests). The two key sanity 
 
 ### Volatility range model (in the dashboard): `src/models/vol_ranges.py`
 
-1. **Daily volatility** per stock: a blend of four measures (based on each day's high-low range, 60-day, 250-day, and one weighted towards recent days).
-2. **Range** for a look-ahead of *H* trading days: `low, high = price × exp(∓ q × daily_vol × √H)`.
-3. **The multiplier *q*** is not assumed from a bell curve: for each look-ahead and level (50%, 80%, 90%) it is the value that would have held the price that share of the time on earlier windows. It is fitted separately for windows with an expected earnings report, where stocks move about 1.7 times more.
-4. **Expected earnings date:** last year's earnings 8-K date plus 364 days (same weekday); it counts if it falls within 3 days of the window.
-5. For the dashboard the multipliers are fitted on windows that ended by 31 Dec 2024 and cached in `data/live/range_fit.json`.
+Version 2 since 17 Nov 2026 (tests in [`results.md`](results.md) section 5d).
 
-**During the day** the page re-centres the range made at the last close on the price now and sizes it for the time left to the same end date: half-width × √(days left ÷ *H*). This is not a separately tested model; the track record describes ranges made at the close.
+1. **Volatility measures** per stock, each known at that day's close: based on each day's high-low range (Garman-Klass, last month), last week, 60-day, 250-day, and one weighted towards recent days. Version 1 used the plain average of four of them; it is still shown on the page as the stock's volatility.
+2. **Volatility forecast** for the window: one least-squares regression of the log of the volatility that actually followed, on the logs of the five measures, the **market's mood** (SPY's last-month volatility against its last-year volatility, the same for every stock on a day), whether an earnings report is expected in the window, and the stock's **typical earnings move** (median |2-day move| around its last 8 reports) against its usual volatility. One regression per look-ahead.
+3. **Range** for a look-ahead of *H* trading days: `low = price × exp(q_low × vol_forecast × √H)`, `high = price × exp(q_high × vol_forecast × √H)`.
+4. **The multipliers** are not assumed from a bell curve: for each look-ahead and level (50%, 80%, 90%) `q_low` and `q_high` are the lower and upper quantiles of past outcomes divided by the forecast, so the range holds the price that share of the time on earlier windows. Up and down are fitted separately ("uneven"), because prices drift up; separately again for windows with an expected earnings report.
+5. **The target day:** the likely middle (the median outcome), "the day's high stays below X" and "the day's low stays above Y", each fitted the same way to hold 9 times in 10 (the day's high and low reach beyond its close).
+6. **Expected earnings date:** last year's earnings 8-K date plus 364 days (same weekday); it counts if it falls within 3 days of the window.
+7. For the dashboard the weights and multipliers are fitted on windows that ended by 31 Dec 2024 and cached in `data/live/range_fit.json`. The 2012–2024 record refits them every year on earlier windows only.
+
+**During the day** the page re-centres the range made at the last close on the price now and sizes it for the time left to the same end date: each side's distance from the price × √(days left ÷ *H*). This is not a separately tested model; the track record describes ranges made at the close.
 
 ### Quantile XGBoost + conformal calibration (first model, comparison pending): `scripts/run_brackets.py`
 

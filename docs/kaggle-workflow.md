@@ -41,7 +41,7 @@ sequenceDiagram
 | `news-download --start 2015-01 --end 2019-12` | Old Benzinga plan download (replaced by `python -m src.ingest.alpaca_news` on the PC) | CPU |
 | `status <job>` / `download <job>` | Check / fetch a job | — |
 
-Add `--no-wait` to start a job and return immediately.
+Add `--no-wait` to start a job and return immediately. Add `--cpu` to run a GPU job on Kaggle's CPU instead when the GPU queue is long: it is slower (the neural net trains on 4 CPU cores) but usually starts at once. It runs as a separate job (`latticeiq-<job>-cpu`), so use `--cpu` with `status` and `download` as well.
 
 Example:
 ```

@@ -21,7 +21,7 @@ One 2026 review of these tools concluded: "there is no peer-reviewed evidence we
 |---|---|---|
 | Rahimikia, Ni & Wang (2025), finance-pretrained time-series models | Best model called direction right **51.74%** of the time; CatBoost 51.16%. General pretrained models (Chronos, TimesFM off the shelf) did worse than gradient boosting | All US stocks, next day |
 | Same paper, portfolios | Long-short Sharpe ratio 5–7 **before trading costs**, daily rebalancing | All US stocks including small ones, which the paper finds more predictable |
-| Microsoft Qlib benchmark | Rank IC of about 0.045 for LightGBM (*figure quoted from memory; re-check before citing in the report*) | Chinese CSI 300 stocks, short horizon |
+| Microsoft Qlib benchmark (Alpha158 features, mean of 20 seeds) | Rank IC **0.0485** LightGBM, 0.0495 XGBoost, 0.0425 MLP, 0.0523 DoubleEnsemble, 0.0573 TRA (best in the table). Checked 17 Nov 2026 | Chinese CSI 300 stocks, short horizon; Chinese A-shares are generally found more predictable than US large caps |
 | Our own tests of pretrained models | Kronos-small rank IC 0.0087 (t 0.81); TimesFM 2.5 rank IC −0.0017 | 466 S&P 500 stocks, 20 days |
 
 ## 3. Where LatticeIQ stands
@@ -35,10 +35,9 @@ Measured walk-forward on the audited S&P 500 list (722 stocks, test years 2012�
 | Years with positive rank IC | 12 of 13 | 10 of 13 | 10 of 13 |
 | Top 20% of the ranking beat the S&P 500 | 50.2% | 49.9% | 50.1% |
 | Bottom 20% of the ranking beat the S&P 500 | 48.4% | 47.7% | 47.4% |
-| 80% price range contains the real price* | 79.8% | 80.3% | 80.2% |
-| 90% price range contains the real price* | 90.0% | 90.4% | 90.8% |
+| 80% price range contains the real price | 79.5% | 79.0% | 79.1% |
 
-\* Price ranges were measured on the earlier 634-stock list; the re-run on the audited list is pending.
+Price ranges: the volatility range model now on the dashboard (v2 since 17 Nov), replayed on the audited list (about 306,000 forecasts per horizon): 80% range held 79.2% / 78.8% / 79.1%, 2.2% / 3.4% / 4.9% narrower than v1. The first range model held 79.8% / 80.3% / 80.2% (80% range) and 90.0% / 90.4% / 90.8% (90% range) on the earlier 634-stock list.
 
 **Measured the way competitors advertise** (how the top-ranked group did against the index): our top 20% beat the S&P 500 about half the time, the bottom 20% clearly less often. The top group matches the market; the bottom group lags it by 0.46% per 20 days relative to the top, in 11 of 13 years. So today LatticeIQ is better at flagging likely laggards than at picking winners. Closing that gap is the main accuracy goal, and this number is reported for every model change.
 
@@ -68,7 +67,7 @@ Measured walk-forward on the audited S&P 500 list (722 stocks, test years 2012�
 | Claim | Status |
 |---|---|
 | "Our ranking has a small, statistically significant edge that held in most of 13 test years" | **Yes** (t-statistic above 2 at all three horizons) |
-| "Our 90% price range contains the real price about 90% of the time" | **Yes** (earlier list; being re-measured) |
+| "Our 80% price range contains the real price about 80% of the time" | **Yes** (79.0–79.5% on the audited list) |
 | "Low-ranked stocks tend to lag the market" | **Yes** (bottom 20% beat the index 47.7% of the time at 20 days) |
 | "Our top picks beat the market" | **No, not yet** |
 | "We predict whether a stock will go up" | **No**: tested and rejected |
@@ -94,5 +93,5 @@ A US launch also needs a legal review of every performance statement before it i
 - Truthifi, "What Is an AI Stock Picker?" (updated Nov 2026; cites Prospero.ai, AltIndex and SPIVA figures): https://truthifi.com/education/ai-stock-picker
 - Walnut, "The Most Accurate AI Stock Predictor?" (Nov 2026): https://walnutinvest.com/resources/most-accurate-ai-stock-predictor
 - Rahimikia, Ni & Wang, "Re(Visiting) Time Series Foundation Models in Finance" (2025): https://arxiv.org/abs/2511.18578
-- Microsoft Qlib benchmarks: https://github.com/microsoft/qlib/tree/main/examples/benchmarks
+- Microsoft Qlib benchmarks README (read from a mirror of commit 8676675, 17 Nov 2026): https://github.com/microsoft/qlib/tree/main/examples/benchmarks
 - LatticeIQ runs: `results/20261114_0752_…h5`, `20261114_0809_…h20`, `20261114_0827_…h60`; all tables in [`results.md`](results.md)

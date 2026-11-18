@@ -70,7 +70,7 @@ Sectors are worked out from prices alone: each month a stock is assigned to the 
 
 **Same dates for every model.** All models are scored on the same weekly dates (every fifth trading day), so differences come from the models, not the sample.
 
-**A locked holdout.** Everything from 1 January 2025 is excluded from all tests and decisions. It will be used once, when the model is final. Trying many variants on the same data and keeping the best one inflates results (Bailey, Borwein, López de Prado & Zhu 2014); an untouched holdout is the guard against that. One choice was made after seeing test results (the neural net alone over a pre-declared ensemble); we say so openly and both will be scored on the holdout.
+**A locked holdout.** Everything from 1 January 2025 is excluded from all tests and decisions. It will be used once, when the model is final, under rules written down before the run ([`holdout-lock.md`](holdout-lock.md)). Trying many variants on the same data and keeping the best one inflates results (Bailey, Borwein, López de Prado & Zhu 2014); an untouched holdout is the guard against that. One choice was made after seeing test results (the neural net alone over a pre-declared ensemble); we say so openly and both will be scored on the holdout.
 
 **A bar for improvements.** Two runs that differed by only five stocks moved the 13-year score by 0.0005–0.0008 and single years by up to 0.015. An addition counts only if it beats the current model by clearly more than that, in most years, in the same run.
 
@@ -93,12 +93,14 @@ Sectors are worked out from prices alone: each month a stock is assigned to the 
 
 **The model in the product: volatility ranges.**
 
-1. Daily volatility is a blend of four measures, one of them based on each day's high and low (Garman & Klass 1980), which uses more of each day's information than closing prices alone.
-2. Range for *H* trading days: price × exp(± *q* × volatility × √*H*).
-3. The multiplier *q* is **not** taken from a bell curve. It is the value that would have held the price the stated share of the time on earlier windows (an empirical quantile), so fat tails are built in.
-4. A separate multiplier applies when an earnings report is expected inside the window. In our data stocks move about 1.7 times more in earnings weeks; a single range held the price only 57% of the time there.
+1. Five volatility measures, one of them based on each day's high and low (Garman & Klass 1980), which uses more of each day's information than closing prices alone.
+2. A regression forecasts the volatility over the window from those measures plus the market's mood (SPY's recent volatility against its own year), whether an earnings report is expected, and the stock's typical earnings move. Combining volatility measured over a week, a month and longer is the idea behind the HAR model of realised volatility (Corsi 2009).
+3. Range for *H* trading days: price × exp(*q* × forecast × √*H*), with a lower and an upper *q*.
+4. The multipliers are **not** taken from a bell curve. They are the values that would have held the price the stated share of the time on earlier windows (empirical quantiles), so fat tails are built in. Up and down are fitted separately because prices drift up.
+5. Separate multipliers apply when an earnings report is expected inside the window. In our data stocks move about 1.7 times more in earnings weeks; a one-size range held the price only 57% of the time there.
+6. For the last day of the window the page also shows the likely middle and how high and how low that day's trading may reach (each bound aimed at 9 times in 10).
 
-**Result (2012–2024, about 306,000 forecasts per horizon):** the "4 in 5" range held 79.5% / 79.0% / 79.1% at 5 / 20 / 60 days; in earnings windows 77–79%.
+**Result (2012–2024, about 306,000 forecasts per horizon):** the "4 in 5" range held 79.2% / 78.8% / 79.1% at 5 / 20 / 60 days, 2.2% / 3.4% / 4.9% narrower than version 1 (a blend of four measures × one multiplier per side), which held 79.5% / 79.0% / 79.1%. The interval score was better in 11, 11 and 10 of 13 years. In earnings windows 77–79%. "Day's high below X" held 88.7–89.6% and "low above Y" 89.6–90.5%.
 
 **The first model, for comparison:** quantile regression with XGBoost (Chen & Guestrin 2016) predicts several percentiles of the outcome; conformalised quantile regression then widens or narrows them using the previous years so the coverage is right (Romano, Patterson & Candès 2019). It held 79.8% / 80.3% / 80.2% on the earlier stock list. A planned improvement is adaptive calibration that recovers faster after shocks such as March 2020 (Gibbs & Candès 2021).
 
@@ -122,7 +124,7 @@ Sectors are worked out from prices alone: each month a stock is assigned to the 
 
 **Why the pretrained forecasters lost.** They read one stock's price history at a time. Deciding which stocks will beat the market needs a comparison across all stocks on the same day, plus company and sector information, which is what our model does. The 2025 study of these models on financial data reached the same conclusion.
 
-## 9. News sentiment (in testing)
+## 9. News sentiment (tested, not adopted)
 
 Media tone has been shown to predict short-term stock and market moves (Tetlock 2007). Our test:
 
@@ -130,6 +132,7 @@ Media tone has been shown to predict short-term stock and market moves (Tetlock 
 - **Scoring:** FinBERT, a language model trained on financial text, gives each headline and summary a score from −1 (negative) to +1 (positive) (Araci 2019). Its licence is non-commercial, so it would be replaced before any commercial use.
 - **Inputs (8):** average tone over 1, 5 and 20 days; how much the stock is in the news; unusual news volume; tone compared with the stock's usual tone; a recent strong-news flag. Before coverage starts, inputs are left empty, not zero ("no data" is not "no news").
 - **Test:** v1.0 with and without these inputs, on test years 2018–2024 (news begins in 2015 and the model needs earlier years to learn from), at 5 and 20 days. Kept only if it passes the bar in section 5.
+- **Result (17 Nov 2026):** rank IC 0.0142 vs 0.0111 at 5 days and 0.0125 vs 0.0099 at 20 days. The difference, tested date by date on the same weeks (Newey-West), has t = 1.29 and 0.83: not distinguishable from chance, and only about twice the gap between two runs of the identical model. At 20 days news was worse in 3 of 7 years. **Not adopted.** This fits Lopez-Lira & Tang (2023), who found headline sentiment predicts returns over the next day or two, mostly faster than our weekly 5- and 20-day forecasts.
 
 ## 10. Limits
 
@@ -155,6 +158,7 @@ Finance: what predicts stock returns
 - Novy-Marx, R. (2013). The other side of value: the gross profitability premium. *Journal of Financial Economics*, 108(1), 1–28.
 - Sloan, R. G. (1996). Do stock prices fully reflect information in accruals and cash flows about future earnings? *The Accounting Review*, 71(3), 289–315.
 - Tetlock, P. C. (2007). Giving content to investor sentiment: the role of media in the stock market. *Journal of Finance*, 62(3), 1139–1168.
+- Lopez-Lira, A. & Tang, Y. (2023). Can ChatGPT forecast stock price movements? Return predictability and large language models. [arXiv:2304.07619](https://arxiv.org/abs/2304.07619).
 - Welch, I. & Goyal, A. (2008). A comprehensive look at the empirical performance of equity premium prediction. *Review of Financial Studies*, 21(4), 1455–1508.
 
 Testing and avoiding false discoveries
@@ -178,6 +182,7 @@ Scores and statistics
 Price ranges
 
 - Garman, M. B. & Klass, M. J. (1980). On the estimation of security price volatilities from historical data. *Journal of Business*, 53(1), 67–78.
+- Corsi, F. (2009). A simple approximate long-memory model of realized volatility. *Journal of Financial Econometrics*, 7(2), 174–196.
 - Gibbs, I. & Candès, E. (2021). Adaptive conformal inference under distribution shift. *NeurIPS 2021*. [arXiv:2106.00170](https://arxiv.org/abs/2106.00170).
 - Romano, Y., Patterson, E. & Candès, E. (2019). Conformalized quantile regression. *NeurIPS 2019*. [arXiv:1905.03222](https://arxiv.org/abs/1905.03222).
 

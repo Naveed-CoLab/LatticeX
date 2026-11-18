@@ -14,7 +14,10 @@ Examples
 
 Output: results/<run_name>/metrics.csv, rank_ic_by_year.csv, dm_tests.json, importance.csv,
         shrink.csv, predictions.parquet, config.json
-The 2025-26 holdout is never touched here.
+The 2025-26 holdout is never touched here, except by the one-time final test (docs/holdout-lock.md):
+  python -m scripts.run_experiment --data real --fundamentals --sectors --models random_walk mlp ensemble --horizon 20 --holdout
+which trains once on data up to 60 trading days before 1 Jan 2025 and scores every week from then to the end of the
+data. Its results are reported whatever they are; nothing is tuned or chosen on them.
 """
 import argparse
 import json
@@ -35,7 +38,7 @@ from src.features.pretrained import FEATURES as PRETRAINED_FEATURES, pretrained_
 from src.features.sector import SECTOR_FEATURES, sector_features
 from src.features.news import NEWS_FEATURES, news_features
 from src.features.price import FEATURES as PRICE_FEATURES, price_features
-from src.folds import eval_dates, make_folds
+from src.folds import eval_dates, holdout_fold, make_folds
 from src.models.ensemble import LGBMForecaster, MLPSeeds, RidgeForecaster, ensemble_rank
 from src.models.random_walk import RandomWalk
 from src.models.xgb_model import XGBForecaster
@@ -184,7 +187,7 @@ def fit_shrunk(name: str, train: pd.DataFrame, y_col: str, feats: list, s: dict,
 def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), horizon=None,
         n_stocks=60, train_step=1, name=None, verbose=True, asset="stock", use_macro=False,
         shrink=True, use_news=False, start_year=None, use_fund=False, use_sectors=False,
-        objective="regression", use_kronos=False, use_timesfm=False, target="spy") -> dict:
+        objective="regression", use_kronos=False, use_timesfm=False, target="spy", holdout_test=False) -> dict:
     s = load_settings()
     h = horizon or s["main_horizon"]
     y, end_col = f"y_{h}", f"target_end_{h}"
@@ -203,8 +206,11 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
     holdout = pd.Timestamp(s["holdout_start"])
     grid = set(eval_dates(panel["date"], s["eval_step"]))
     train_grid = set(eval_dates(panel["date"], train_step))
-    folds = make_folds(panel["date"], start_year or s["folds"]["first_test_year"], s["folds"]["last_test_year"],
-                       s["folds"]["embargo_days"], s["holdout_start"])
+    if holdout_test:                                   # the one-time final test: one model, scored on 2025 onward
+        folds = [holdout_fold(panel["date"], s["folds"]["embargo_days"], s["holdout_start"])]
+    else:
+        folds = make_folds(panel["date"], start_year or s["folds"]["first_test_year"], s["folds"]["last_test_year"],
+                           s["folds"]["embargo_days"], s["holdout_start"])
     lags = max(math.ceil(h / s["eval_step"]) - 1, 0)
     if verbose:
         print(f"Panel: {len(panel):,} rows, {panel['ticker'].nunique()} {asset}s, {len(feats)} features, "
@@ -215,11 +221,14 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
         train = panel[(panel["date"] <= f.train_end) & panel[y].notna() & panel[yt].notna()
                       & panel["date"].isin(train_grid)]
         test = panel[(panel["date"] >= f.test_start) & (panel["date"] <= f.test_end)
-                     & panel["date"].isin(grid) & panel[y].notna() & (panel[end_col] < holdout)]
+                     & panel["date"].isin(grid) & panel[y].notna() & ((panel[end_col] < holdout) | holdout_test)]
         if train.empty or test.empty:
             continue
         assert train[end_col].max() < f.test_start, "target leakage: a training target ends inside the test year"
         base = test[["date", "ticker", y]].rename(columns={y: "y_true"}).assign(fold=f.year)
+        if holdout_test:                               # one model, scored by calendar year
+            assert train[end_col].max() < holdout, "a training target ends inside the holdout"
+            base["fold"] = base["date"].dt.year
 
         trained = {}                                   # name -> (shrunk prediction, raw prediction)
         need = [m for m in TRAINED if m in models or ("ensemble" in models and m in ENSEMBLE_MEMBERS)]
@@ -263,7 +272,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
         if verbose:
             ks = [x for x in shrinks if x["fold"] == f.year]
             k_txt = (", k / val IC " + " ".join(f"{x['model']}={x['k']:.2f}/{x['val_ic']:+.3f}" for x in ks)) if ks else ""
-            print(f"  fold {f.year}: train to {f.train_end.date()} ({len(train):,} rows), "
+            print(f"  {'HOLDOUT' if holdout_test else 'fold'} {f.year}: train to {f.train_end.date()} ({len(train):,} rows), "
                   f"test {len(test):,} rows{k_txt}  [{time.time() - t0:.0f}s]")
 
     preds = pd.concat(all_preds, ignore_index=True)
@@ -279,7 +288,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
                .unstack("model"))
 
     tag = (f"{source}{'_' + signal if source == 'synthetic' else ''}_{asset}_h{h}"
-           f"{'_fund' if use_fund else ''}{'_sect' if use_sectors else ''}{'_kron' if use_kronos else ''}{'_tfm' if use_timesfm else ''}{'_sectgt' if target == 'sector' else ''}{'_rank' if objective == 'rank' else ''}{'_macro' if use_macro else ''}{'_news' if use_news else ''}{f'_from{start_year}' if start_year else ''}")
+           f"{'_fund' if use_fund else ''}{'_sect' if use_sectors else ''}{'_kron' if use_kronos else ''}{'_tfm' if use_timesfm else ''}{'_sectgt' if target == 'sector' else ''}{'_rank' if objective == 'rank' else ''}{'_macro' if use_macro else ''}{'_news' if use_news else ''}{f'_from{start_year}' if start_year else ''}{'_HOLDOUT' if holdout_test else ''}")
     out = path("results") / (name or f"{datetime.now():%Y%m%d_%H%M}_{tag}")
     out.mkdir(parents=True, exist_ok=True)
     table.to_csv(out / "metrics.csv", index=False)
@@ -292,7 +301,7 @@ def run(source="synthetic", signal="none", models=("random_walk", "xgboost"), ho
     (out / "config.json").write_text(json.dumps({
         "source": source, "signal": signal, "asset": asset, "horizon": h, "models": list(models),
         "features": feats, "macro": use_macro, "news": use_news, "fundamentals": use_fund, "sectors": use_sectors, "kronos": use_kronos, "timesfm": use_timesfm, "target": target, "objective": objective, "start_year": start_year, "shrink": shrink, "train_step": train_step,
-        "n_tickers": int(panel["ticker"].nunique()), "settings": s}, indent=2, default=str))
+        "holdout_test": holdout_test, "n_tickers": int(panel["ticker"].nunique()), "settings": s}, indent=2, default=str))
 
     if verbose:
         pd.set_option("display.width", 160)
@@ -322,6 +331,7 @@ if __name__ == "__main__":
     p.add_argument("--macro", action="store_true", help="add macro features (off by default: 8 Nov ablation showed no gain)")
     p.add_argument("--no-macro", action="store_true", help="(default now; kept so old commands still work)")
     p.add_argument("--no-shrink", action="store_true", help="use raw XGBoost predictions")
+    p.add_argument("--holdout", action="store_true", help="the ONE-TIME final test on 2025 onward (docs/holdout-lock.md)")
     p.add_argument("--news", action="store_true", help="add news sentiment features")
     p.add_argument("--fundamentals", action="store_true", help="add SEC EDGAR fundamental features")
     p.add_argument("--sectors", action="store_true", help="add sector momentum + within-sector ranks")
@@ -335,7 +345,16 @@ if __name__ == "__main__":
     p.add_argument("--train-step", type=int, default=1, help="use every Nth day for training (5 = 5x faster)")
     p.add_argument("--name")
     a = p.parse_args()
+    if a.holdout and (a.start_year or a.data != "real"):
+        raise SystemExit("--holdout is the one-time final test on real data; it takes no --start-year.")
+    if a.news and a.data == "real":               # check before the 4-minute panel build, not after it
+        missing = [n for n in ("news_articles.parquet", "news_scored.parquet") if not (path("clean") / n).exists()]
+        if missing:
+            raise SystemExit(f"--news needs data/clean/{' and '.join(missing)}. Download: python -m src.ingest.alpaca_news "
+                             "--start 2015-01, then --combine; score: python -m scripts.kaggle_cloud news-score. "
+                             "On Kaggle: run upload-data and wait until the dataset shows both files.")
     run(a.data, a.signal, tuple(a.models), a.horizon, a.n_stocks, a.train_step, a.name,
         asset=a.asset, use_macro=a.macro, shrink=not a.no_shrink, use_news=a.news,
         start_year=a.start_year, use_fund=a.fundamentals, use_sectors=a.sectors,
-        objective="rank" if a.rank else "regression", use_kronos=a.kronos, use_timesfm=a.timesfm, target=a.target)
+        objective="rank" if a.rank else "regression", use_kronos=a.kronos, use_timesfm=a.timesfm, target=a.target,
+        holdout_test=a.holdout)

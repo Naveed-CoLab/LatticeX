@@ -565,15 +565,21 @@ def _range_world(n_stocks=40, days=1500, seed=3, earn_boost=2.2):
 def test_vol_ranges_use_only_the_past_and_hold_as_often_as_they_say():
     from src.models import vol_ranges as vr
     px, u, ev = _range_world()
-    px["vol"] = vr.daily_vol(px)
-    # no look-ahead: changing prices after a date must not change the volatility known on that date
+    spy = px[px["ticker"] == "S00"].assign(ticker="SPY")              # a stand-in market for the mood input
+    f = vr.features(px, spy)
+    # no look-ahead: changing prices after a date must not change anything known on that date
     cut = px["date"] <= "2012-06-29"
     px2 = px.copy()
     px2.loc[~cut, ["open", "high", "low", "close", "adj_close"]] *= 3.0
-    assert np.allclose(vr.daily_vol(px2)[cut].dropna(), px.loc[cut, "vol"].dropna())
+    f2 = vr.features(px2, spy.assign(**{c: np.where(spy["date"] <= "2012-06-29", spy[c], spy[c] * 3) for c in ["open", "high", "low", "close", "adj_close"]}))
+    for c in vr.MEASURES + ["vol", "m_short", "m_long"]:
+        assert np.allclose(f2.loc[cut.values, c].dropna(), f.loc[cut.values, c].dropna()), c
+    assert np.allclose(vr.daily_vol(px)[cut].dropna(), f.loc[cut.values, "vol"].dropna())
+    et = vr.earnings_typical(px, ev)
+    assert (et["e_typ"] > 0).all() and len(et) > 0
     # walk-forward hit rates land near what the range claims
     est = vr.expected_earnings(ev)
-    m = vr.panel(px, u, est, 5)
+    m = vr.panel(f, u, est, 5, et)
     tr = vr.track_record(m, 5, first_year=2013, last_year=2015)
     for lv in ("50", "80", "90"):
         assert abs(tr["levels"][lv]["hit_rate"] - int(lv) / 100) < 0.04, (lv, tr["levels"][lv])
@@ -581,11 +587,33 @@ def test_vol_ranges_use_only_the_past_and_hold_as_often_as_they_say():
     e80 = tr["levels"]["80"]
     assert e80["avg_width_earnings"] > 1.1 * e80["avg_width_other"]
     assert e80["hit_rate_earnings"] > 0.72
-    # today's ranges nest: 50% inside 80% inside 90%, all around the price
-    q = vr.fit_multipliers(m)
-    r = vr.ranges_today(100.0, 0.02, 5, q, earn=False)["bands"]
-    assert r["90"][0] < r["80"][0] < r["50"][0] < 100 < r["50"][1] < r["80"][1] < r["90"][1]
-    assert vr.ranges_today(100.0, 0.02, 5, q, earn=True)["bands"]["80"][1] > r["80"][1]
+    # the target day's high and low bounds hold about 9 times in 10
+    assert abs(tr["day"]["high_held"] - 0.9) < 0.04 and abs(tr["day"]["low_held"] - 0.9) < 0.04, tr["day"]
+    # today's ranges nest: 50% inside 80% inside 90%, around the price; the day's bounds sit outside the 50% range
+    fitted = vr.fit(m, 5)
+    row = {**f.iloc[-1][vr.MEASURES + ["vol", "m_short", "m_long"]].to_dict(), "e_typ": np.nan, "earn": False}
+    r = vr.ranges_today(100.0, row, 5, fitted)
+    b = r["bands"]
+    assert b["90"][0] < b["80"][0] < b["50"][0] < 100 < b["50"][1] < b["80"][1] < b["90"][1]
+    assert r["day"]["lo"] < b["50"][0] and r["day"]["hi"] > b["50"][1] and b["50"][0] < r["day"]["mid"] < b["50"][1]
+    assert vr.ranges_today(100.0, {**row, "earn": True}, 5, fitted)["bands"]["80"][1] > b["80"][1]
+
+
+def test_vol_ranges_are_uneven_when_prices_drift():
+    """Up and down are fitted separately: with an upward drift the range and its middle sit above today's price."""
+    from src.models import vol_ranges as vr
+    px, u, ev = _range_world()
+    days = px.groupby("ticker").cumcount().to_numpy()
+    lift = np.exp(0.0015 * days)                                      # about +0.75% a week
+    for c in ["open", "high", "low", "close", "adj_close"]:
+        px[c] = px[c] * lift
+    f = vr.features(px)                                               # no market file: mood counts as neutral
+    m = vr.panel(f, u, vr.expected_earnings(ev), 5, vr.earnings_typical(px, ev))
+    fitted = vr.fit(m, 5)
+    row = {**f.iloc[-1][vr.MEASURES + ["vol", "m_short", "m_long"]].to_dict(), "e_typ": np.nan, "earn": False}
+    r = vr.ranges_today(100.0, row, 5, fitted)
+    assert r["day"]["mid"] > 100.3
+    assert r["bands"]["80"][1] - 100 > 100 - r["bands"]["80"][0]
 
 
 def test_expected_earnings_window_flag():
@@ -803,6 +831,9 @@ def test_alpaca_news_download_keeps_our_stocks_and_benzinga_only(tmp_path, monke
                  "created_at": f"{day:%Y-%m-%d}T1{i % 9}:30:00Z", "symbols": [["AAPL"], ["MSFT", "BRK.B"], ["ZZZZ"], []][i % 4],
                  "source": ["benzinga", "", "fiscal.ai"][i % 3], "url": None} for i in range(12)]
         news = [n for n in news if set(n["symbols"]) & asked]
+        if page == 0 and params["start"].startswith("2024-03"):     # one re-published article from years earlier
+            news.append({"id": 1, "headline": "old", "summary": "", "created_at": "2012-04-17T10:00:00Z",
+                         "symbols": ["AAPL"], "source": "benzinga", "url": None})
         return {"news": news, "next_page_token": str(page + 1) if page < 2 else None}
 
     monkeypatch.setattr(A, "_get", fake)
@@ -822,6 +853,7 @@ def test_alpaca_news_download_keeps_our_stocks_and_benzinga_only(tmp_path, monke
     assert set(",".join(saved["tickers"]).split(",")) == {"AAPL", "MSFT", "BRK-B"}
     assert saved["title"].iloc[0].startswith("Apple beats & raises") and saved["teaser"].iloc[0] == "Strong quarter"
     assert str(saved["created_utc"].dt.tz) == "UTC"
+    assert saved["created_utc"].min() >= pd.Timestamp("2024-03-01", tz="UTC")   # nothing before the first month asked for
 
     scores = pd.DataFrame({"id": saved["id"], "score": 0.5})
     nf = news_features(saved, scores, pd.bdate_range("2024-02-01", "2024-05-10"), ["AAPL", "MSFT", "BRK-B"], False)
@@ -839,3 +871,57 @@ def test_sector_from_sec_industry_code():
     assert {c: sic_sector(c) for c in expected} == expected
     assert sic_sector("7389", "V") == "Financials" and sic_sector(None) is None and sic_sector("x") is None
 
+
+
+def test_dashboard_login_blocks_requests_without_the_password(tmp_path):
+    """On a server every page and data request needs the password; a wrong or missing one gets 401."""
+    import base64, functools, http.server, threading, urllib.request, urllib.error
+    from scripts import run_dashboard as rd
+    assert rd.authorized(None, "")                                      # no password set: open (own computer)
+    good = "Basic " + base64.b64encode(b"anyone:s3cret pass").decode()
+    assert rd.authorized(good, "s3cret pass")
+    assert not rd.authorized("Basic " + base64.b64encode(b"anyone:wrong").decode(), "s3cret pass")
+    assert not rd.authorized(None, "s3cret pass") and not rd.authorized("Basic !!notbase64", "s3cret pass")
+    (tmp_path / "index.html").write_text("hello", encoding="utf-8")
+    H = type("H", (rd.Handler,), {"password": "s3cret pass"})
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(H, directory=str(tmp_path)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}/"
+    try:
+        for path in ("", "api/today"):
+            try:
+                urllib.request.urlopen(url + path, timeout=5)
+                raise AssertionError("opened without a password")
+            except urllib.error.HTTPError as e:
+                assert e.code == 401 and "Basic" in e.headers["WWW-Authenticate"]
+        r = urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": good}), timeout=5)
+        assert r.status == 200 and r.read() == b"hello"
+    finally:
+        srv.shutdown()
+
+
+def test_holdout_test_trains_before_2025_and_scores_only_2025_on(tmp_path, monkeypatch):
+    """The one-time final test: one model, trained only on targets that ended before 1 Jan 2025 (with the 60-day
+    gap), scored only on dates from 1 Jan 2025. And the Kaggle job refuses to run it twice."""
+    import shutil
+    from src.folds import holdout_fold
+    dates = pd.Series(pd.bdate_range("2004-01-01", "2026-10-30"))
+    f = holdout_fold(dates, 60, "2025-01-01")
+    idx = pd.DatetimeIndex(dates)
+    assert f.test_start == pd.Timestamp("2025-01-01") and f.test_end == pd.Timestamp("2026-10-30")
+    assert idx.get_loc(f.test_start) - idx.get_loc(f.train_end) == 61
+    r = run("synthetic", "momentum", n_stocks=30, train_step=5, name="pytest_holdout_HOLDOUT", verbose=False,
+            horizon=20, holdout_test=True)
+    p = pd.read_parquet(r["out"] / "predictions.parquet")
+    assert p["date"].min() >= pd.Timestamp("2025-01-01") and set(p["fold"]) == {2025, 2026}
+    assert r["metrics"].set_index("model").loc["xgboost", "rank_ic"] > 0.03     # the planted signal is found there too
+    # run-once guard: a holdout result on disk blocks a second run
+    from scripts import kaggle_cloud as kc
+    assert kc.holdout_steps(again=True) == kc.HOLDOUT_STEPS
+    try:
+        kc.holdout_steps()
+        raise AssertionError("a second holdout run was allowed")
+    except SystemExit as e:
+        assert "already been run" in str(e)
+    finally:
+        shutil.rmtree(r["out"], ignore_errors=True)

@@ -1,0 +1,14 @@
+# What the dashboard needs on a server (python -m scripts.run_dashboard). The research and training
+# packages in ../../requirements.txt are not needed there.
+pandas>=2.2,<3          # the code is tested on pandas 2.x; 3.0 changed copy and string behaviour
+numpy>=1.26
+scipy>=1.12
+pyarrow>=15,<23
+pyyaml>=6
+python-dotenv>=1.0
+requests>=2.31
+tenacity>=8.2
+xgboost-cpu>=2.1        # imported by the experiment code the daily ranking reuses; the CPU build is 10x smaller
+lightgbm>=4.0
+scikit-learn>=1.4
+yfinance>=0.2.40

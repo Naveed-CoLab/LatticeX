@@ -224,6 +224,86 @@ Stocks sorted each week by the v1.0 forecast (3-seed MLP), test years 2012–202
 - The typical stock trails SPY slightly (an index is carried by a few big winners, and log returns of a volatile stock average lower), so even the top group only matches SPY. The measurable value today is **avoiding the bottom group**, not picking market-beaters.
 - The gap is before trading costs.
 
+## 5d. Can the price ranges be narrower at the same hit rate? (17 Nov 2026, universe v2)
+
+Replayed walk-forward on 2012–2024, weekly, about 318,000 forecasts per horizon (the study run, which also included the 18 index and sector funds; the stock-only replay in the product code is below): for each test year every weight and multiplier comes only from windows that ended before that year. Interval score: width plus a penalty for each miss (lower is better). "Years better": test years in which the interval score beat the current method.
+
+| 80% range | 5 days | 20 days | 60 days |
+|---|---|---|---|
+| **Current** (blended volatility, earnings-aware): held · average width | 79.3% · 9.1% | 78.8% · 18.8% | 79.1% · 33.1% |
+| **Candidate** (volatility forecast by regression + uneven up/down): held · average width | 79.0% · 8.9% | 78.7% · 18.1% | 79.1% · 31.5% |
+| Narrower by | 2.4% | 3.7% | 5.0% |
+| Interval score better by · years better | 1.0% · 11 of 13 | 1.7% · 11 of 13 | 2.2% · 10 of 13 |
+| Worst year held, current → candidate | 75.6% → 77.2% | 75.7% → 76.5% | 73.3% → 75.6% |
+| Earnings windows held, current → candidate | 77.3% → 77.4% | 78.2% → 78.5% | 79.3% → 79.2% |
+
+The candidate predicts each stock's volatility over the window with one regression, refitted each year on past windows only: the four current measures plus one-week volatility, the market's mood (SPY's recent volatility against its own year), whether earnings fall in the window, and the stock's own typical earnings move (median of its last 8). The ranges then use the multipliers that would have held the price, separately for the upside and the downside, because prices drift up: the middle of the range is about +0.3% / +1.2% / +3.4% above today's price, and the close ended above that middle 51% of the time.
+
+What each part adds (20 days, width change against current): the regression 3.3% (market mood is most of it: without it 2.4%), the stock's own earnings moves about 0%, one-week volatility about 0.3%, uneven up/down a further 0.4%.
+
+Tested and rejected:
+
+| Idea | Result | Why rejected |
+|---|---|---|
+| Separate multipliers by volatility level and market mood (18 groups) | 2.8–5.9% narrower, but held 78.6% / 78.7% at 20 / 60 days and a worse interval score than the candidate | Narrower by missing more; too many groups for the data |
+| Blend in the last year's multipliers (adaptive) | Interval score worse at 20 and 60 days | Reacts to last year's market, which is often over |
+| Separate multipliers for stocks with under two years of history | Those stocks held 77.7% / 76.7% / 74.3% (worse than without) | Too few such stocks per year to fit reliably. Without it they hold 78.6% / 77.8% / 77.6%, about one point under the rest |
+
+**The target day's high and low** (new output, same replay): "the day's high stays below X" and "the day's low stays above Y", each meant to hold 9 times in 10.
+
+| | 5 days | 20 days | 60 days |
+|---|---|---|---|
+| High stayed below X | 89.4% | 88.9% | 88.7% |
+| Low stayed above Y | 89.6% | 90.0% | 90.5% |
+| Both held | 79.0% | 78.9% | 79.2% |
+| Typical X, Y against today's price | +5.6%, −5.2% | +10.9%, −9.4% | +19.4%, −14.4% |
+
+Both bounds are close to the 90% they aim for, so they can be shown. They are wider than the close range because a day's high and low reach beyond its close.
+
+**Now in the product (17 Nov).** The candidate is `src/models/vol_ranges.py` v2. Replayed in the product code on stocks only (the same 306,000 forecasts per horizon as v1), with v1 scored on the same rows:
+
+| 80% range, 2012–2024 | 5 days | 20 days | 60 days |
+|---|---|---|---|
+| v1: held · average width | 79.5% · 9.2% | 79.0% · 19.1% | 79.1% · 33.6% |
+| **v2: held · average width** | **79.2% · 9.0%** | **78.8% · 18.4%** | **79.1% · 32.0%** |
+| Narrower by · interval score better by | 2.2% · 1.0% | 3.4% · 1.7% | 4.9% · 2.2% |
+| Years with a better interval score | 11 of 13 | 11 of 13 | 10 of 13 |
+| Worst year held, v1 → v2 | 75.8% → 77.4% | 75.9% → 76.6% | 73.3% → 75.6% |
+| Earnings windows held, v1 → v2 | 77.3% → 77.4% | 78.2% → 78.4% | 79.3% → 79.2% |
+| 50% and 90% ranges held (v2) | 49.7%, 89.3% | 48.6%, 89.2% | 48.8%, 89.4% |
+| Day's high below X · low above Y · both | 89.6% · 89.6% · 79.2% | 89.0% · 90.1% · 79.1% | 88.7% · 90.5% · 79.2% |
+
+**Reading this.** The gain is real but small: one to two percentage points of width out of ten to thirty, steady across years, with the same hit rate. Most of a stock's swing cannot be forecast from its past prices; the biggest known improvement would be the options market's own volatility forecast (implied volatility), for which no free history was found.
+
+## 5e. News sentiment vs v1.0 (17 Nov 2026, universe v2) — not adopted
+
+v1.0 with and without the 8 news inputs (FinBERT tone of 767,435 Benzinga articles, 2015 on), same code, same seeds, run on Kaggle's CPU, test years 2018–2024 (news starts in 2015; earlier years are needed to learn from), weekly dates. Runs: `20261117_1501_…h5…from2018`, `1536_…h5…news`, `1551_…h20…`, `1605_…h20…news`.
+
+| Rank IC by test year | 5 d: v1.0 | 5 d: + news | 20 d: v1.0 | 20 d: + news |
+|---|---|---|---|---|
+| 2018 | 0.012 | 0.012 | 0.020 | 0.024 |
+| 2019 | 0.013 | 0.012 | −0.003 | −0.003 |
+| 2020 | 0.028 | 0.037 | 0.015 | 0.017 |
+| 2021 | −0.006 | −0.000 | 0.003 | 0.011 |
+| 2022 | 0.025 | 0.025 | 0.025 | 0.020 |
+| 2023 | 0.002 | 0.007 | 0.023 | 0.036 |
+| 2024 | 0.005 | 0.007 | −0.015 | −0.019 |
+| **2018–2024** | **0.0111** (t 1.51) | **0.0142** (t 2.02) | **0.0099** (t 1.10) | **0.0125** (t 1.40) |
+
+| Is the gain real? | 5 days | 20 days |
+|---|---|---|
+| News minus v1.0, mean of weekly rank ICs | +0.0031 | +0.0027 |
+| Paired t (Newey-West, same dates) | 1.29 | 0.83 |
+| Weeks in which news ranked better | 51.0% | 54.6% |
+| Years better · same · worse | 4 · 2 · 1 | 4 · 0 · 3 |
+| Same model run twice (CPU here vs the GPU run of 14 Nov): mean difference | −0.0015 | +0.0003 |
+| Same model run twice: largest difference in one year | 0.005 | 0.004 |
+| Top fifth minus average stock, per window (v1.0 → news) | +0.044% → +0.039% | +0.099% → +0.097% |
+| Bottom fifth minus average stock, per window (v1.0 → news) | −0.086% → −0.086% | −0.186% → −0.210% |
+| Rank correlation of the two models' forecasts | 0.84 | 0.81 |
+
+**Verdict.** News helps a little in the years with big news-driven moves (2020, 2021, 2023), but the gain is about twice the difference between two runs of the very same model and well short of the bar (paired t about 2, most years better at both horizons). At 20 days it is worse in 3 of 7 years. The top and bottom fifths do not improve. **v1.0 stays; news is not added.** By the rule set before the test, a stronger language model for sentiment is not tried either. The download, scoring and features stay in the code for a later retest with more years or a licensed feed.
+
 ## 6. Single-feature ICs (2010–2024)
 
 All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), short-term reversal (`ret_5`, `ret_20` negative), free-cash-flow yield (+0.013), sector-relative momentum (+0.013), sector-relative earnings surprise (+0.011), accruals (−0.011). File: [`../results/factor_ic_2010_2024.csv`](../results/factor_ic_2010_2024.csv).
@@ -232,7 +312,6 @@ All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), s
 
 - ARIMA baseline
 - Volatility range model vs quantile XGBoost on universe v2 (interval score)
-- News sentiment vs v1.0 on 2018–2024 (download built 16 Nov)
 - Crash risk, recovery, sector-neutral target on real data
 
 ## Limitations

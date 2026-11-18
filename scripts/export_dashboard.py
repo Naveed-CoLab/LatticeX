@@ -11,7 +11,8 @@ Also reads config/universe.csv, data/clean/sec_events.parquet and (if present) s
 Writes app/data/index.json (one row per stock), app/data/stocks/<TICKER>.json (candles, price ranges,
 expected earnings, recent filings) and app/data/track.json (how often the ranges held in 2012-2024).
 
-Price ranges come from src/models/vol_ranges.py. Their multipliers are fitted on windows that ended by
+Price ranges come from src/models/vol_ranges.py (v2: volatility forecast by regression + uneven up/down, plus the
+target day's likely middle, high and low). Their weights and multipliers are fitted on windows that ended by
 31 Dec 2024, so the 2025-26 holdout period is never scored. app/data/ is not committed (prices are licensed).
 """
 import argparse
@@ -138,7 +139,7 @@ def important(items: str) -> str:
 
 
 PRICE_COLS = ["ticker", "date", "open", "high", "low", "close", "volume", "adj_close"]
-FIT_VERSION = 1                 # raise when the range method changes, so the saved fit is rebuilt
+FIT_VERSION = 2                 # raise when the range method changes, so the saved fit is rebuilt
 
 
 def frozen_prices() -> pd.DataFrame:
@@ -200,36 +201,35 @@ def stock_rows(px: pd.DataFrame, tickers) -> pd.DataFrame:
     return px.sort_values(["ticker", "date"]).reset_index(drop=True)
 
 
-def range_fit(u: pd.DataFrame, est: dict) -> tuple:
-    """Multipliers (windows that ended by CALIB_END) and the 2012-2024 walk-forward record, from the frozen
-    research data. Takes about a minute, so the result is kept until one of its input files changes."""
+def range_fit(u: pd.DataFrame, ev: pd.DataFrame | None) -> tuple:
+    """Weights and multipliers (windows that ended by CALIB_END) and the 2012-2024 walk-forward record, from the
+    frozen research data. Takes a minute or two, so the result is kept until one of its input files changes."""
     files = [path("clean") / "prices.parquet", path("clean") / "sec_events.parquet", ROOT / "config" / "universe.csv"]
-    key = [FIT_VERSION, f"{CALIB_END:%Y-%m-%d}"] + [[f.name, f.stat().st_size, f.stat().st_mtime_ns] if f.exists() else [f.name]
-                                                    for f in files]
+    # the frozen research files never change in place, so their sizes identify them; file times are left out so
+    # that a fit copied from another computer (e.g. to the server) is reused instead of refitted
+    key = [FIT_VERSION, f"{CALIB_END:%Y-%m-%d}"] + [[f.name, f.stat().st_size] if f.exists() else [f.name] for f in files]
     cache = ROOT / "data" / "live" / "range_fit.json"
     if cache.exists():
         saved = json.loads(cache.read_text(encoding="utf-8"))
         if saved.get("key") == key:
-            q = {int(h): {flag == "true": {float(lv): v for lv, v in lvs.items()} for flag, lvs in by.items()}
-                 for h, by in saved["q"].items()}
-            return q, saved["ranges"]
-    print("Fitting the ranges on the research data and replaying 2012-2024 (about a minute, only when the data changes)", flush=True)
-    px = stock_rows(frozen_prices(), u["ticker"])
-    px["vol"] = vr.daily_vol(px)
-    q, ranges = {}, {}
+            return {int(h): v for h, v in saved["fit"].items()}, saved["ranges"]
+    print("Fitting the ranges on the research data and replaying 2012-2024 (a minute or two, only when the data changes)", flush=True)
+    allpx = frozen_prices()
+    px = stock_rows(allpx, u["ticker"])
+    f = vr.features(px, stock_rows(allpx, ["SPY"]))
+    est, et = vr.expected_earnings(ev), vr.earnings_typical(px, ev)
+    fits, ranges = {}, {}
     for h in vr.HORIZONS:
-        m = vr.panel(px, u, est, h)
-        q[h] = vr.fit_multipliers(m[m["d_end"] <= CALIB_END])
+        m = vr.panel(f, u, est, h, et)
+        fits[h] = vr.fit(m[m["d_end"] <= CALIB_END], h)
         ranges[str(h)] = vr.track_record(m, h)
-        lv = ranges[str(h)]["levels"]["80"]
+        lv, dy = ranges[str(h)]["levels"]["80"], ranges[str(h)]["day"]
         print(f"  {h:>2}-day ranges, 2012-2024: 80% range held {lv['hit_rate']:.1%} of the time "
               f"(earnings windows {lv['hit_rate_earnings']:.1%}, others {lv['hit_rate_other']:.1%}), "
-              f"average width {lv['avg_width']:.1%}")
+              f"average width {lv['avg_width']:.1%}; day high below X {dy['high_held']:.1%}, low above Y {dy['low_held']:.1%}")
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps({"key": key, "ranges": ranges,
-                                 "q": {str(h): {str(flag).lower(): {str(lv): v for lv, v in lvs.items()}
-                                                for flag, lvs in by.items()} for h, by in q.items()}}), encoding="utf-8")
-    return q, ranges
+    cache.write_text(json.dumps({"key": key, "ranges": ranges, "fit": {str(h): v for h, v in fits.items()}}), encoding="utf-8")
+    return fits, ranges
 
 
 def all_events(ev: pd.DataFrame | None) -> pd.DataFrame | None:
@@ -256,7 +256,7 @@ def main() -> None:
     u = u[u["type"] == "stock"]
     ev_file = path("clean") / "sec_events.parquet"
     ev = pd.read_parquet(ev_file) if ev_file.exists() else None
-    q, ranges = range_fit(u, vr.expected_earnings(ev))
+    fits, ranges = range_fit(u, ev)
     ev = all_events(ev)
     est = vr.expected_earnings(ev)
 
@@ -282,7 +282,8 @@ def main() -> None:
         px = px[px["date"] <= asof].reset_index(drop=True)
         funds = funds[funds["date"] <= asof]
     print("Measuring each stock's volatility", flush=True)
-    px["vol"] = vr.daily_vol(px)
+    px = vr.features(px, stock_rows(funds, ["SPY"]))
+    typical_now = vr.earnings_typical(px, ev).groupby("ticker")["e_typ"].last() if ev is not None else pd.Series(dtype=float)
     print(f"Closing prices of {asof:%a %d %b %Y} ({'updated' if source == 'live' else 'SAVED, not updated'}), "
           f"{len(set(px['ticker']) & set(u.loc[u['end'].isna(), 'ticker']))} index members; "
           f"{'earnings calendar for ' + str(len(est)) + ' companies' if est else 'no SEC events file: ranges are not earnings-aware'}")
@@ -342,10 +343,13 @@ def main() -> None:
             if len(done):
                 reported, show = done.max(), vr.next_expected(t, own + pd.to_timedelta(4, unit="D"), est)
         rng = {}
+        today = {c: d[c].iloc[-1] for c in vr.MEASURES + ["vol", "m_short", "m_long"]}
+        today["e_typ"] = typical_now.get(t, np.nan)
         for h in vr.HORIZONS:
             end = future[h - 1]
             earn = bool(nxt is not None and nxt <= end + vr.EARN_TOL)
-            rng[str(h)] = {"end": f"{end:%Y-%m-%d}", "earn": earn, **vr.ranges_today(price, vol, h, q[h], earn)}
+            rng[str(h)] = {"end": f"{end:%Y-%m-%d}", "earn": earn,
+                           **vr.ranges_today(price, {**today, "earn": earn}, h, fits[h])}
         hist, filings = [], []
         if e is not None:
             hist = earnings_moves(d["date"].to_numpy(), d["adj_close"].to_numpy(), e[e["ev_earnings"].astype(bool)])

@@ -1,0 +1,18 @@
+[Unit]
+Description=LatticeIQ dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__DIR__
+# Listens on this server only; Caddy serves it to the internet over HTTPS. The login comes from .env.
+ExecStart=__DIR__/.venv/bin/python -m scripts.run_dashboard --no-browser --host 127.0.0.1 --port __PORT__
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

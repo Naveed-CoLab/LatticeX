@@ -84,7 +84,7 @@ flowchart TD
 - A Random Walk baseline that every model must beat.
 - Tests run on every push to GitHub.
 
-**Result.** 43 tests pass today. On random data the model shows no skill (t near 0); on planted momentum it finds it (rank IC 0.10, t 13).
+**Result.** 47 tests pass today. On random data the model shows no skill (t near 0); on planted momentum it finds it (rank IC 0.10, t 13).
 
 **Where.** `tests/test_pipeline.py`, `src/data/synthetic.py`, `src/eval/metrics.py`, [`architecture.md`](architecture.md#point-in-time-rules-no-look-ahead).
 
@@ -180,7 +180,8 @@ Weak spots: 2024 is negative at 20 and 60 days; 2019 and 2021 are about zero at 
 1. First model: quantile XGBoost with conformal calibration. Its 80% range held the price 79.8% / 80.3% / 80.2% of the time at 5 / 20 / 60 days.
 2. Tested a "chance of going up" from the same model: it lost to the plain historical rate (stocks rose 57% of the time), so it was **dropped**.
 3. Found that in weeks with an earnings report a one-size range held the price only 57% of the time.
-4. Built a simpler **volatility range model** with a separate width for earnings windows. Its 80% range held 79.5% / 79.0% / 79.1%, and 77–79% in earnings windows. This is the one in the product.
+4. Built a simpler **volatility range model** with a separate width for earnings windows. Its 80% range held 79.5% / 79.0% / 79.1%, and 77–79% in earnings windows.
+5. Version 2 (17 Nov): a regression forecasts each stock's volatility (adding one-week volatility, the market's mood and the stock's typical earnings move), and the up and down sides are fitted separately. Same hit rate (79.2% / 78.8% / 79.1%), 2.2% / 3.4% / 4.9% narrower, better in 10–11 of 13 years. It also gives the last day's likely middle, high and low (each bound held 88.7–90.5% against an aim of 90%). This is the one in the product.
 
 **Where.** `src/models/vol_ranges.py`, `scripts/run_brackets.py`, [`architecture.md`](architecture.md#price-ranges).
 
@@ -216,7 +217,7 @@ Weak spots: 2024 is negative at 20 and 60 days; 2019 and 2021 are about zero at 
 
 | Candidate | State | Next action |
 |---|---|---|
-| **News sentiment** | 🔄 Alpaca has 435–1,144 articles a day from 2015, covering 13–33% of members on sampled days. Download and merge built and tested | Download on the PC, score sentiment on Kaggle, compare with and without news on 2018–2024 |
+| **News sentiment** | ❌ Tested 17 Nov: 767,435 Benzinga articles scored by FinBERT. Rank IC +0.003 at 5 and 20 days on 2018–2024, but paired t only 1.29 / 0.83 and worse in 3 of 7 years at 20 days | Not adopted; v1.0 stays. Code kept for a retest |
 | Sector-neutral target | Code written | Run on Kaggle |
 | SEC 8-K events as inputs | Filings downloaded | Write the features, then compare |
 | Finance-pretrained forecaster (FinText Chronos) | ⏳ | Runner and comparison |
@@ -233,6 +234,8 @@ Score each logged daily forecast once its outcome is known (5, 20, 60 trading da
 ## Step 13. Holdout test, once ⏳ 🔒
 
 When the model is final: train v1.0 (and the secondary ensemble) on data up to the end of 2024, score 2025–26 once, and publish the result whatever it is. Nothing has been tested, tuned or chosen on this period. The setting is `holdout_start` in `config/settings.yaml`.
+
+**Locked on 17 Nov 2026.** The model is final (v1.0 for ranking, range model v2 for the ranges). The rules were written down before the run in [`holdout-lock.md`](holdout-lock.md): what is tested, on which data, the exact commands and what counts as passing. The holdout is short (about 90 weekly dates), so even a real edge is expected to show t ≈ 1.2: the main question is whether the 20-day rank IC is above zero. Run with `python -m scripts.kaggle_cloud holdout --cpu` and `python -m scripts.holdout_ranges`; both refuse a second run.
 
 ## Step 14. Report and presentation ⏳
 
@@ -251,7 +254,7 @@ Data, method, results with their limits, the data error and how it was handled, 
 
 | Question | How to check |
 |---|---|
-| Is there look-ahead? | `pytest -q` runs 43 tests, including "random data shows no skill"; GitHub Actions runs them on every push |
+| Is there look-ahead? | `pytest -q` runs 47 tests, including "random data shows no skill"; GitHub Actions runs them on every push |
 | Are the numbers real? | Each run's settings and metrics are in `results/<run>/`; runs `20261114_0752`, `0809`, `0827` hold the v1.0 headline numbers |
 | Was the holdout used? | `holdout_start: "2025-01-01"` in `config/settings.yaml` is enforced by `src/folds.py`; there is a test for it |
 | What do we claim? | The claims table in the [README](../README.md#what-we-claim-and-what-we-dont): what we say, what we do not, and why |

@@ -6,7 +6,7 @@
   const cfg = window.LATTICE || {};
   const domains = window.LATTICE_DOMAINS || {};
   const LWC = window.LightweightCharts;
-  const state = { index: null, track: null, sel: null, h: "20", view: "overview", sort: "az", filter: "all", f: { sec: "", move: "", rank: "", range: "" }, period: "3M", stock: null, stars: new Set(), hit: 0, today: { quotes: {}, state: null, fetched: null }, ctype: "line", vol: true };
+  const state = { index: null, track: null, sel: null, h: "20", view: "overview", sort: "az", filter: "all", f: { sec: "", move: "", rank: "", range: "" }, period: "3M", stock: null, stars: new Set(), hit: 0, today: { quotes: {}, state: null, fetched: null }, ctype: "line", vol: true, allRanges: false };
   const cache = new Map();
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const PERIOD = { "1W": 5, "1M": 22, "3M": 66, "6M": 132, "1Y": 252 };
@@ -34,6 +34,7 @@
   // ---------- small helpers ----------
   const money = (v) => "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pct = (v, d = 1) => (v * 100).toFixed(d) + "%";
+  const span = (b, at) => `${signed(b[0] / at - 1, 1)} / ${signed(b[1] / at - 1, 1)}`;     // a range as down / up from a price
   const signed = (v, d = 2) => (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(d) + "%";
   const pill = (v, d = 2) => `<span class="pill ${v >= 0 ? "up" : "down"}">${signed(v, d)}</span>`;
   const date = (s) => new Date(s + "T12:00:00");
@@ -102,7 +103,7 @@
     attached(p) { this.chart = p.chart; this.series = p.series; this.request = p.requestUpdate; }
     detached() { this.chart = null; }
     paneViews() { return this.views; }
-    autoscaleInfo() { return this.d ? { priceRange: { minValue: this.d.bands["90"][0], maxValue: this.d.bands["90"][1] } } : null; }
+    autoscaleInfo() { const d = this.d, top = d && d.levels[0]; return d ? { priceRange: { minValue: d.bands[top][0], maxValue: d.bands[top][1] } } : null; }
     set(d, animate) {
       this.d = d;
       if (reduceMotion || !d || !animate) { this.p = 1; this.request && this.request(); return; }
@@ -127,20 +128,31 @@
         const n = Math.max(1, Math.round(d.h * (1 - Math.pow(1 - this.p, 3))));       // ease out
         const xs = [x0];
         for (let i = 1; i <= n; i++) { const v = x(d.future[i - 1]); if (v === null) break; xs.push(v); }
-        const edge = (lv, sign) => xs.map((_, i) => y(d.price * Math.exp(sign * Math.log(d.bands[lv][1] / d.price) * Math.sqrt(i / d.h))));
+        const path = (v) => xs.map((_, i) => y(d.price * Math.exp(Math.log(v / d.price) * Math.sqrt(i / d.h))));
+        const edge = (lv, side) => path(d.bands[lv][side > 0 ? 1 : 0]);
         c.save();
-        if (layer === "bottom") for (const lv of ["90", "80", "50"]) {
+        const one = d.levels.length === 1;
+        if (layer === "bottom") for (const lv of d.levels) {
           const up = edge(lv, 1), dn = edge(lv, -1);
           c.beginPath();
           xs.forEach((v, i) => (i ? c.lineTo(v, up[i]) : c.moveTo(v, up[i])));
           for (let i = xs.length - 1; i >= 0; i--) c.lineTo(xs[i], dn[i]);
           c.closePath();
-          c.fillStyle = d.colors[lv];
+          c.fillStyle = one ? d.colors.one : d.colors[lv];
           c.fill();
+          if (one) {                                         // a single range gets a clear edge
+            c.strokeStyle = d.colors.edge; c.lineWidth = 1.25;
+            for (const e of [up, dn]) { c.beginPath(); xs.forEach((v, i) => (i ? c.lineTo(v, e[i]) : c.moveTo(v, e[i]))); c.stroke(); }
+          }
         }
         if (layer === "bottom") {
           c.strokeStyle = d.colors.rule; c.lineWidth = 1;
           c.beginPath(); c.moveTo(x0, 0); c.lineTo(x0, mediaSize.height); c.stroke();
+          if (d.mid) {                                       // the likely middle: half the time above, half below
+            const m = path(d.mid);
+            c.strokeStyle = d.colors.edge; c.lineWidth = 1.25; c.setLineDash([2, 4]);
+            c.beginPath(); xs.forEach((v, i) => (i ? c.lineTo(v, m[i]) : c.moveTo(v, m[i]))); c.stroke(); c.setLineDash([]);
+          }
           if (d.earnAt !== null && this.p > 0.4) {
             const xe = x(d.future[d.earnAt]);
             if (xe !== null) {
@@ -168,7 +180,8 @@
         if (this.p === 1 && xs.length > 1) {
           const xe = xs[xs.length - 1] + 6;
           c.fillStyle = d.colors.text; c.textAlign = "left"; c.textBaseline = "middle";
-          for (const lv of ["90", "80", "50"]) c.fillText(lv + "%", xe, y(d.bands[lv][1]) + 7);
+          if (one) c.fillText("4 in 5", xe, y(d.bands["80"][1]) + 7);
+          else for (const lv of d.levels) c.fillText(lv + "%", xe, y(d.bands[lv][1]) + 7);
         }
         c.restore();
       });
@@ -184,15 +197,16 @@
   }
   function rangeNow(s, hh) {
     const r = s.ranges[hh], H = Number(hh), q = quote(s.t), at = q ? s.future.indexOf(q.date) : -1;
-    const made = { end: r.end, earn: r.earn, bands: r.bands, half: r.half, live: false, anchor: s.price, anchorTime: s.candles[s.candles.length - 1][0], from: 0, steps: H };
+    const made = { end: r.end, earn: r.earn, bands: r.bands, half: r.half, day: r.day, live: false, anchor: s.price, anchorTime: s.candles[s.candles.length - 1][0], from: 0, steps: H };
     if (at < 0 || at >= H) return made;
-    const k = Math.sqrt(Math.max(0.25, H - at - sessionDone()) / H), bands = {}, half = {};
+    const k = Math.sqrt(Math.max(0.25, H - at - sessionDone()) / H), bands = {}, half = {}, day = {};
+    const move = (v) => q.last * Math.exp(Math.log(v / s.price) * k);      // same distance from the price, scaled to the time left
     for (const lv of ["50", "80", "90"]) {
-      const hw = Math.log(1 + r.half[lv]) * k;
-      bands[lv] = [q.last * Math.exp(-hw), q.last * Math.exp(hw)];
-      half[lv] = Math.exp(hw) - 1;
+      bands[lv] = r.bands[lv].map(move);
+      half[lv] = (bands[lv][1] - bands[lv][0]) / 2 / q.last;
     }
-    return { end: r.end, earn: r.earn, bands, half, live: true, anchor: q.last, anchorTime: q.date, from: at + 1, steps: Math.max(1, H - 1 - at), made };
+    if (r.day) for (const x of ["mid", "hi", "lo"]) day[x] = move(r.day[x]);
+    return { end: r.end, earn: r.earn, bands, half, day: r.day ? day : null, live: true, anchor: q.last, anchorTime: q.date, from: at + 1, steps: Math.max(1, H - 1 - at), made };
   }
 
   // ---------- chart ----------
@@ -214,7 +228,7 @@
   }
   function chartColors() {
     return { text: css("--ink-2"), rule: css("--ink-3"), ink: css("--ink"), grid: css("--rule-soft"), up: css("--up"), down: css("--down"),
-      sheet: css("--sheet"), "90": css("--cone-90"), "80": css("--cone-80"), "50": css("--cone-50"), amber: css("--amber-fill"), amberText: css("--amber") };
+      sheet: css("--sheet"), "90": css("--cone-90"), "80": css("--cone-80"), "50": css("--cone-50"), one: css("--cone-one"), edge: css("--cone"), amber: css("--amber-fill"), amberText: css("--amber") };
   }
   function buildChart() {
     const k = chartColors();
@@ -270,8 +284,8 @@
     } else {
       const r = rangeNow(s, state.h), n = s.future.indexOf(p.time) + 1 - r.from;
       if (n < 1 || n > r.steps) { tip.hidden = true; return; }
-      const hw = Math.log(r.bands["80"][1] / r.anchor) * Math.sqrt(n / r.steps);
-      html = `<b>${day(p.time, true)}</b><span class="big">${money(r.anchor * Math.exp(-hw))} to ${money(r.anchor * Math.exp(hw))}</span>` +
+      const at = (v) => money(r.anchor * Math.exp(Math.log(v / r.anchor) * Math.sqrt(n / r.steps)));
+      html = `<b>${day(p.time, true)}</b><span class="big">${at(r.bands["80"][0])} to ${at(r.bands["80"][1])}</span>` +
         `<span class="sub">likely range in ${n} trading day${n > 1 ? "s" : ""}, right 4 times in 5</span>`;
     }
     tip.innerHTML = html;
@@ -342,7 +356,8 @@
       const i = fut.findIndex((t) => t >= s.earnings.next);
       earnAt = i < 0 || i > r.steps + 2 ? null : Math.min(r.steps - 1, i);
     }
-    return { h: r.steps, price: r.anchor, last: r.anchorTime, future: fut, bands: r.bands, colors: chartColors(), earnAt, label: r.live ? "now" : "last close" };
+    return { h: r.steps, price: r.anchor, last: r.anchorTime, future: fut, bands: r.bands, mid: r.day ? r.day.mid : null, colors: chartColors(), earnAt,
+      levels: state.allRanges ? ["90", "80", "50"] : ["80"], label: r.live ? "now" : "last close" };
   }
   function paintToday() {                        // new prices for today; the days on the time axis stay the same,
     if (!state.stock || !chart) return;          // so the chart keeps whatever the person has scrolled or zoomed to
@@ -485,21 +500,50 @@
     $("fc").innerHTML = Object.keys(s.ranges).map((hh) => { const x = rangeNow(s, hh), v = x.bands["80"];
       return `<button type="button" data-fc="${hh}" aria-pressed="${hh === h}"><span class="when"><b>${day(x.end, true)}</b><span>${x.live ? `${x.steps + 1} trading days left` : `in ${hh} trading days`}</span></span>
         <span class="rng"><span>${money(v[0])}</span><i>to</i><span>${money(v[1])}</span></span>
-        <span class="how">${x.earn ? '<i class="e" title="Earnings report in this window"></i>' : ""}±${pct(x.half["80"])}, right 4 times in 5</span></button>`; }).join("");
+        <span class="how">${x.earn ? '<i class="e" title="Earnings report in this window"></i>' : ""}${span(v, x.anchor)}, right 4 times in 5</span></button>`; }).join("");
     $("fcnote").innerHTML = r.live
       ? `<i class="livedot"></i>Following today's price: centred on ${money(q.last)} and sized for the time left to each date. At the close of ${day(s.asof, true)} the ${h}-day range was ${money(r.made.bands["80"][0])} to ${money(r.made.bands["80"][1])}.`
       : `Measured from the close of ${day(s.asof, true)}, ${money(s.price)}. While the market is open the ranges follow the price.`;
     $("say").innerHTML = `By ${day(r.end, true)}, ${s.t} is likely to be between <strong>${money(b[0])}</strong> and <strong>${money(b[1])}</strong>. ` +
-      `Replayed on 2012 to 2024, ranges made at the close held the price about 4 times out of 5. They show how far the price may move, not which way.`;
+      `Replayed on 2012 to 2024, ranges made at the close held the price about 4 times out of 5. They show how far the price may move, not which way; ` +
+      `they sit a little above today's price because prices have tended to drift up.`;
     $("ladder-title").textContent = `Likely price by ${day(r.end)}`;
     const lo = r.bands["90"][0], hi = r.bands["90"][1], pos = (v) => ((v - lo) / (hi - lo)) * 100;
-    $("ladder").innerHTML = ["50", "80", "90"].map((lv) => {
+    $("ladder").innerHTML = (state.allRanges ? ["50", "80", "90"] : ["80"]).map((lv) => {
       const x = r.bands[lv];
-      return `<div class="rung" data-l="${lv}"><span class="how">${PLAIN[lv]}</span><span class="pct">±${pct(r.half[lv])}</span>
+      return `<div class="rung" data-l="${lv}"><span class="how">${PLAIN[lv]}</span><span class="pct">${span(x, r.anchor)}</span>
         <span class="vals">${money(x[0])} to ${money(x[1])}</span><span></span>
         <span class="bar"><i style="left:${pos(x[0]).toFixed(1)}%;right:${(100 - pos(x[1])).toFixed(1)}%"></i><b style="left:${pos(r.anchor).toFixed(1)}%"></b></span></div>`;
     }).join("");
-    $("ladder-note").textContent = `The mark is ${r.live ? "the price now" : "the last close"}, ${money(r.anchor)}. A narrower range is right less often; pick the one that matches how sure you need to be.`;
+    $("ladder-note").innerHTML = `The mark is ${r.live ? "the price now" : "the last close"}, ${money(r.anchor)}. ` + (state.allRanges
+      ? `A narrower range is right less often; pick the one that matches how sure you need to be. <button type="button" class="link" data-ranges>Show one range</button>`
+      : `Need to be more sure, or want a tighter range? <button type="button" class="link" data-ranges>Show the 50% and 90% ranges</button>`);
+    renderDay(r);
+    renderLegend();
+  }
+  function renderDay(r) {
+    const d = r.day, box = $("dayside");
+    box.hidden = !d;
+    if (!d) return;
+    const lo = Math.min(d.lo, r.bands["90"][0]), hi = Math.max(d.hi, r.bands["90"][1]), pos = (v) => ((v - lo) / (hi - lo)) * 100;   // same scale as the ranges above
+    $("day-title").textContent = `On ${day(r.end)} itself`;
+    $("dayrows").innerHTML = `
+      <div class="dr"><span>Day's high stays below</span><b>${money(d.hi)}</b><small>9 times in 10</small></div>
+      <div class="dr mid"><span>Likely middle for the close</span><b>${money(d.mid)}</b><small>above it half the time</small></div>
+      <div class="dr"><span>Day's low stays above</span><b>${money(d.lo)}</b><small>9 times in 10</small></div>
+      <div class="daybar" aria-hidden="true"><i style="left:${pos(d.lo).toFixed(1)}%;right:${(100 - pos(d.hi)).toFixed(1)}%"></i>
+        <em style="left:${pos(d.mid).toFixed(1)}%"></em><b style="left:${pos(r.anchor).toFixed(1)}%"></b></div>`;
+    const R = (state.track.ranges || {})[state.h], D = R && R.day;
+    $("day-note").innerHTML = `The day's high and low reach beyond its close, so these sit outside the closing range.` +
+      (D ? ` Replayed on 2012 to 2024: the high stayed below ${pct(D.high_held)} of the time and the low above ${pct(D.low_held)}.` : "");
+  }
+  // the key under the chart: one range by default, all three on request (the same switch as in the side panel)
+  function renderLegend() {
+    $("legend").innerHTML = (state.allRanges
+      ? `<span><i class="sw l50"></i>Likely half the time</span><span><i class="sw l80"></i>4 times in 5</span><span><i class="sw l90"></i>9 times in 10</span>`
+      : `<span><i class="sw l1"></i>Likely range, right 4 times in 5</span>`) + `<span><i class="sw mid"></i>Likely middle</span>` +
+      `<span><i class="sw ex"></i>Earnings expected</span><span><i class="sw ep">E</i>Past earnings report</span>` +
+      `<button type="button" class="link more" data-ranges>${state.allRanges ? "Show one range" : "Show 50% and 90% ranges"}</button>`;
   }
   // where the trained model ranks this stock among all of them, for each look-ahead
   const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]);
@@ -747,6 +791,12 @@
       <p>If a range says “4 times in 5”, the price should land inside it about 80% of the time. This is what happened.</p>
       <div class="scroll"><table><thead><tr><th>Look ahead</th><th>“Half the time”</th><th>“4 times in 5”</th><th>“9 times in 10”</th><th>“4 times in 5” in<br>earnings weeks</th><th>Typical width<br>(4 times in 5)</th></tr></thead>
       <tbody>${Object.keys(R).map(row).join("")}</tbody></table></div>
+      ${R[h].day ? `<h2>The day itself</h2>
+      <p>Each stock page also says how high and how low the price may trade on the last day of the window. Each bound aims to hold 9 times in 10.</p>
+      <div class="scroll"><table><thead><tr><th>Look ahead</th><th>High stayed below</th><th>Low stayed above</th><th>Both held</th><th>Typical bounds</th></tr></thead><tbody>
+      ${Object.keys(R).filter((hh) => R[hh].day).map((hh) => { const D = R[hh].day; return `<tr><td>${hh} trading days</td><td>${pct(D.high_held)}<small>aimed for 90%</small></td>
+        <td>${pct(D.low_held)}<small>aimed for 90%</small></td><td>${pct(D.both_held)}</td><td>${signed(D.avg_low, 1)} / ${signed(D.avg_high, 1)}</td></tr>`; }).join("")}
+      </tbody></table></div>` : ""}
       <h2>Year by year, ${h} trading days</h2>
       <p>Share of “4 times in 5” ranges that held the price. Years far below the line are the ones to distrust: markets moved more than their recent past suggested.</p>
       <div class="years" role="img" aria-label="Hit rate of the 4-times-in-5 range in each year, against the 80% aim">
@@ -768,7 +818,7 @@
         <li>Promise the price stays inside a range. One time in five it will not.</li>
         <li>See surprises: sudden news can move a price further than any range.</li></ul></div></div>
       <h2>How the ranges are made</h2>
-      <p>Each range is centred on today's price. Its width follows how much that stock has been moving, measured four ways and blended, and it is wider when an earnings report is expected. The widths were tuned on windows that ended by ${day(t.calibrated_to)} ${t.calibrated_to.slice(0, 4)}; nothing after that date has been used to tune or score them.</p>
+      <p>Each range starts from today's price. Its width follows a forecast of how much that stock will move: how much it has moved lately (measured five ways), how nervous the whole market is, and whether an earnings report is expected, together with how much this stock usually moves on its reports. The upper and lower sides are set separately, so the range sits a little above today's price, as prices have tended to drift up. The widths were tuned on windows that ended by ${day(t.calibrated_to)} ${t.calibrated_to.slice(0, 4)}; nothing after that date has been used to tune or score them.</p>
     </div>`;
   }
 
@@ -901,7 +951,13 @@
     else if (a === "stocks") setView("stocks");
     else { state.sel = null; setView("stocks"); select(a, true); }
 
+    state.allRanges = store.get("lattice-ranges") === "all";
     document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-ranges]")) {
+        state.allRanges = !state.allRanges; store.set("lattice-ranges", state.allRanges ? "all" : "one");
+        if (state.stock) { cone.set(coneData(), false); renderLive(); setRange(); } else renderLegend();
+        return;
+      }
       const f = e.target.closest("[data-fc]");
       if (f) { setH(f.dataset.fc); return; }
       const v = e.target.closest("[data-view]");

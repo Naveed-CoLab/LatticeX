@@ -102,6 +102,7 @@ def _get(url: str) -> requests.Response:
             time.sleep(3 * (attempt + 1))
             continue
         if r.status_code in (429, 503):
+            print(f"    The SEC asked us to slow down (HTTP {r.status_code}); waiting {10 * (attempt + 1)} s", flush=True)
             time.sleep(10 * (attempt + 1))
             continue
         return r

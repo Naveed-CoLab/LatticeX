@@ -201,6 +201,13 @@ def combine() -> pd.DataFrame:
     if not files:
         raise SystemExit("No Alpaca news downloaded yet. Run: python -m src.ingest.alpaca_news --start 2015-01")
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
+    # a handful of articles carry a publication date years before the first month asked for (re-published
+    # pieces). Left in, they would make the news features treat 2012-2014 as "covered, no news" instead of unknown.
+    first = pd.Timestamp(min(f.stem for f in files) + "-01", tz="UTC")
+    early = int((df["created_utc"] < first).sum())
+    df = df[~(df["created_utc"] < first)]
+    if early:
+        print(f"{early} articles dated before {first:%b %Y}, the first month downloaded, are left out.")
     df = df.drop_duplicates("id")
     bad = int(df["created_utc"].isna().sum())
     if bad:

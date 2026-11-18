@@ -34,12 +34,18 @@ Crash risk (GPU): probability of a >10% drop within 20 days, vs a volatility-onl
 Recovery after a crash (GPU): history table + P(back at the pre-drop price within 60 / 20 days)
   python -m scripts.kaggle_cloud recovery "--data real --fundamentals --sectors" "--data real --fundamentals --sectors --within 20"
 
+The one-time final test on 2025-26 (docs/holdout-lock.md). Refuses to run if a holdout result is already on
+this PC, or if the lock file is missing. v1.0 and the secondary ensemble, 5 / 20 / 60 days, about 1 hour on CPU.
+  python -m scripts.kaggle_cloud holdout --cpu
+
 The model for daily use (GPU, about 15 minutes): train v1.0 on all data and save it; the dashboard then ranks
 every stock with it after each close. Repeat every month or quarter.
   python -m scripts.kaggle_cloud final-model
 
 Every command waits for Kaggle to finish, then copies the outputs to your PC:
   data files -> data\\clean\\        results -> results\\        model -> models\\        logs -> results\\kaggle_<job>.log
+Add --cpu to run a GPU job on Kaggle's CPU instead (no GPU queue; slower). It runs as a separate job named
+"...-cpu", so use --cpu with status and download too, e.g.: download experiments --cpu
 Add --no-wait to start a job and return immediately; collect later with:
   python -m scripts.kaggle_cloud download <job>      jobs: news-probe, news-download, news-score, experiments, final-model
   (news chunks run as separate jobs named by start year and can run at the same time;
@@ -79,6 +85,7 @@ JOBS = {
     "crash":         {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
     "recovery":      {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
     "final-model":   {"gpu": True, "secrets": False, "sources": [], "keep": ["models"]},
+    "holdout":       {"gpu": True, "secrets": False, "sources": [], "keep": ["results"]},
     "kronos":        {"gpu": True, "secrets": False, "sources": [],
                       "keep": ["data/clean/kronos_forecasts.parquet", "data/clean/kronos_timing.parquet"]},
     "timesfm":       {"gpu": True, "secrets": False, "sources": [],
@@ -239,8 +246,10 @@ def upload_data() -> None:
     print("Uploaded. Give Kaggle a few minutes to process it before starting a job.")
 
 
-def push(name: str, steps: list, variant: str = "") -> None:
-    user, j = kaggle_user(), JOBS[name]
+def push(name: str, steps: list, variant: str = "", cpu: bool = False) -> None:
+    user, j = kaggle_user(), dict(JOBS[name])
+    if cpu:
+        j["gpu"] = False
     folder = ROOT / "data" / "kaggle_upload" / f"kernel_{slug(name, variant)}"
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir(parents=True)
@@ -317,12 +326,31 @@ def download(name: str, wait: bool = True, poll_minutes: int = 2, variant: str =
         upload_data()
 
 
+HOLDOUT_STEPS = ["scripts.run_experiment --data real --fundamentals --sectors --models random_walk mlp ensemble "
+                 f"--horizon {h} --holdout" for h in (5, 20, 60)]
+
+
+def holdout_steps(again: bool = False) -> list:
+    """The fixed commands of the final test, written in docs/holdout-lock.md before it was run. It is meant to run
+    once: a second run would let the result be re-rolled, so it is refused unless --again is given (and then the
+    reason must be written into the lock file)."""
+    if not (ROOT / "docs" / "holdout-lock.md").exists():
+        raise SystemExit("docs/holdout-lock.md is missing: the final test runs only after its rules are written down.")
+    done = sorted(p.name for p in path("results").glob("*_HOLDOUT"))
+    if done and not again:
+        raise SystemExit(f"The holdout has already been run ({', '.join(done)}). It is used once. If a run failed and must "
+                         "be repeated, write why in docs/holdout-lock.md, then add --again.")
+    return HOLDOUT_STEPS
+
+
 def main(argv: list) -> None:
     if not argv:
         return print(__doc__)
     cmd, rest = argv[0], argv[1:]
     wait = "--no-wait" not in rest
-    rest = [a for a in rest if a != "--no-wait"]
+    cpu = "--cpu" in rest
+    rest = [a for a in rest if a not in ("--no-wait", "--cpu")]
+    with_cpu = lambda v: (f"{v}-cpu" if v else "cpu") if cpu else v
     if cmd == "upload-secrets":
         return upload_secrets()
     if cmd == "upload-data":
@@ -330,7 +358,7 @@ def main(argv: list) -> None:
     if cmd in ("status", "download"):
         if not rest or rest[0] not in JOBS:
             raise SystemExit(f"which job? one of: {', '.join(JOBS)}  (news chunks: download news-download --start 2015-01)")
-        v = variant_of(rest[0], rest[1:])
+        v = with_cpu(variant_of(rest[0], rest[1:]))
         return print(status(rest[0], v)) if cmd == "status" else download(rest[0], variant=v)
     if cmd == "news-probe":
         steps = ["src.ingest.benzinga " + (" ".join(rest) if rest else "--probe")]
@@ -358,6 +386,9 @@ def main(argv: list) -> None:
     elif cmd == "recovery":
         jobs = rest or ["--data real --fundamentals --sectors"]
         steps = ["scripts.run_recovery " + j for j in jobs]
+    elif cmd == "holdout":
+        steps = holdout_steps("--again" in rest)
+        rest = [a for a in rest if a != "--again"]
     elif cmd == "final-model":
         steps = ["scripts.train_final " + " ".join(rest)]
     elif cmd == "crash":
@@ -365,8 +396,8 @@ def main(argv: list) -> None:
         steps = ["scripts.run_crash_risk " + j for j in jobs]
     else:
         raise SystemExit(f"unknown command {cmd!r}\n{__doc__}")
-    v = variant_of(cmd, rest)
-    push(cmd, steps, v)
+    v = with_cpu(variant_of(cmd, rest))
+    push(cmd, steps, v, cpu=cpu)
     if wait:
         time.sleep(45)
         download(cmd, variant=v)
