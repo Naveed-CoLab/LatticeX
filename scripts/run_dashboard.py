@@ -17,9 +17,10 @@ If a trained model is saved (models/latticeiq_v1.npz, see scripts/train_final.py
 after each close and the rank is shown on the page.
 Runs on this computer only (127.0.0.1) unless --host says otherwise. Stop it with Ctrl+C.
 
-Login: if LATTICEIQ_PASSWORD is set (in .env or the environment), every page and data request needs that
-password (the browser asks for it once; any user name works). Required with --host other than 127.0.0.1. On a
-server, put a web server with HTTPS in front (deploy/aws/), so the password never travels unencrypted.
+Login (optional): if LATTICEIQ_PASSWORD is set (in .env or the environment), every page and data request needs
+that password (the browser asks for it once; any user name works). Required with --host other than 127.0.0.1. On
+the AWS server the program listens on 127.0.0.1 behind Caddy (deploy/aws/), so an empty password makes the site
+open to anyone with the address. Every response asks search engines not to index it, and /robots.txt says the same.
 """
 import argparse
 import base64
@@ -186,9 +187,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().do_HEAD()
 
     def do_GET(self):
+        url = urllib.parse.urlparse(self.path)
+        if url.path == "/robots.txt":                          # keep the site out of search results
+            body = b"User-agent: *\nDisallow: /\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return self.wfile.write(body)
         if self.locked():
             return
-        url = urllib.parse.urlparse(self.path)
         if url.path == "/api/today":
             return self.send_json(today_payload())
         if url.path == "/api/analysts":
@@ -219,6 +227,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")        # always show the latest export
+        self.send_header("X-Robots-Tag", "noindex, nofollow")
         super().end_headers()
 
     def log_message(self, *args):                             # keep the terminal quiet

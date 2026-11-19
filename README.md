@@ -258,7 +258,7 @@ Two rules shape this design:
 
 ### Server interface
 
-The server listens on `127.0.0.1:8600` only (this computer) unless started with `--host`, which needs a login. With `LATTICEIQ_PASSWORD` set, every request needs that password (HTTP Basic, any user name; 401 otherwise); on a server it sits behind Caddy, which adds HTTPS. All responses are JSON except the page files.
+The server listens on `127.0.0.1:8600` only (this computer) unless started with `--host`, which needs a login. With `LATTICEIQ_PASSWORD` set, every request needs that password (HTTP Basic, any user name; 401 otherwise). On a server it sits behind Caddy, which adds HTTPS; the hosted site runs without a password. Every response carries `X-Robots-Tag: noindex` and `/robots.txt` disallows crawling. All responses are JSON except the page files.
 
 | Request | Returns |
 |---|---|
@@ -350,7 +350,7 @@ Outside systems: Yahoo Finance, SEC EDGAR, Tiingo, Alpaca, Kaggle, a logo servic
 | NFR-4 | **Speed.** Price update about a minute; ranking under a minute; page data about 10 seconds; price on screen at most 20 seconds old plus the source's delay of up to 15 minutes | Measured on the development PC |
 | NFR-5 | **Keeps working.** A failed download never stops the dashboard; old prices are kept if most tickers fail; a failing analyst request affects only its card | Handled in `run_dashboard.py`, `live.py`, `analysts.py`; tests |
 | NFR-6 | **Same result twice.** Fixed random seeds, settings in one file, research data frozen, each run saved with its settings | `config/settings.yaml`, `results/` |
-| NFR-7 | **Private.** On the PC the server accepts connections from this computer only; on a server every request needs the password and travels over HTTPS; no accounts and no personal data; API keys and the password only in `.env` | `127.0.0.1` binding; refuses `--host` without a password; Caddy HTTPS; `.gitignore`; login test |
+| NFR-7 | **Safe to host.** On the PC the server accepts connections from this computer only; on a server everything travels over HTTPS, a password is optional, and search engines are asked not to list the site; no accounts and no personal data; API keys only in `.env` | `127.0.0.1` binding; refuses `--host` without a password; Caddy HTTPS; noindex header and robots.txt; `.gitignore`; login test |
 | NFR-8 | **Runs on an ordinary PC.** Daily use needs no GPU and no PyTorch | NumPy scoring from saved weights |
 | NFR-9 | **Easy to change safely.** One feature code path for research and daily use; tests on every push | GitHub Actions |
 | NFR-10 | **Usable.** Light and dark themes, works at laptop and phone widths, keyboard search and stepping | Checked by screenshot at several sizes |
@@ -360,7 +360,7 @@ Outside systems: Yahoo Finance, SEC EDGAR, Tiingo, Alpaca, Kaggle, a logo servic
 - S&P 500 stocks only; US regular market hours; market holidays are not known to the system (on a holiday it finds no new prices).
 - Free data: Yahoo and Tiingo prices are for research and personal use, and prices can be delayed by up to 15 minutes. A commercial launch needs a licensed feed keyed by a permanent security ID.
 - The sentiment scorer under test (FinBERT) is non-commercial; logos are trademarks loaded from an outside service, not stored.
-- One shared password, no per-person accounts, no mobile app. The hosted version is one server with no standby copy.
+- No per-person accounts (the site is open or behind one shared password), no mobile app. The hosted version is one server with no standby copy.
 - Fundamentals are as of the last download; a weekly refresh is not automated yet.
 - The intraday ranges are the closing ranges re-centred, not a separately tested model.
 
@@ -468,7 +468,7 @@ Each start downloads the latest closing prices (about a minute, only when a newe
 
 Details of every part of the page: [`app/README.md`](app/README.md).
 
-**On a server.** The same program runs on one small AWS Lightsail server (about $7 a month) behind HTTPS with a password: `deploy/aws/setup.sh` installs it, and [`deploy/aws/README.md`](deploy/aws/README.md) has the steps. The site stays private because the price data and FinBERT are licensed for research only.
+**On a server.** The same program runs on one small AWS Lightsail server (about $7 a month) behind HTTPS, with no login since 19 Nov (a password can be switched back on in `.env`): `deploy/aws/setup.sh` installs it, and [`deploy/aws/README.md`](deploy/aws/README.md) has the steps. The free price data is licensed for personal or research use, so the site asks search engines not to list it, and a licensed feed comes before promoting it.
 
 ## Repository layout
 

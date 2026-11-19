@@ -895,7 +895,11 @@ def test_dashboard_login_blocks_requests_without_the_password(tmp_path):
             except urllib.error.HTTPError as e:
                 assert e.code == 401 and "Basic" in e.headers["WWW-Authenticate"]
         r = urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": good}), timeout=5)
-        assert r.status == 200 and r.read() == b"hello"
+        assert r.status == 200 and r.read() == b"hello" and r.headers["X-Robots-Tag"] == "noindex, nofollow"
+        r = urllib.request.urlopen(url + "robots.txt", timeout=5)          # served even with a login
+        assert r.read() == b"User-agent: *\nDisallow: /\n"
+        H.password = ""                                                    # no password: open to anyone
+        assert urllib.request.urlopen(url, timeout=5).read() == b"hello"
     finally:
         srv.shutdown()
 

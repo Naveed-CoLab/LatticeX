@@ -31,7 +31,7 @@ sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q --upgrade pip
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q -r "$APP_DIR/deploy/aws/requirements-server.txt"
 sudo -u "$APP_USER" mkdir -p "$APP_DIR/data/clean" "$APP_DIR/data/live" "$APP_DIR/models"
 
-# 4. Secrets file: only the app user can read it. You fill in the two values (nano .env).
+# 4. Settings file: only the app user can read it. You fill in the values (nano .env).
 if [ ! -f "$APP_DIR/.env" ]; then
   printf '%s\n' "# LatticeIQ server settings. Never commit this file." \
     "SEC_USER_AGENT=" "LATTICEIQ_PASSWORD=" > "$APP_DIR/.env"
@@ -55,6 +55,6 @@ systemctl reload caddy || systemctl restart caddy
 echo
 echo "Done. Next:"
 echo "  1. Copy the data from your PC (deploy/aws/upload_data.ps1)."
-echo "  2. nano $APP_DIR/.env   -> set SEC_USER_AGENT (name and email) and LATTICEIQ_PASSWORD"
+echo "  2. nano $APP_DIR/.env   -> set SEC_USER_AGENT (name and email); LATTICEIQ_PASSWORD only if you want a login"
 echo "  3. sudo systemctl start latticeiq     then watch it start: journalctl -u latticeiq -f"
-echo "  4. Open https://$DOMAIN  (any user name, your password)"
+echo "  4. Open https://$DOMAIN  (with a password set: any user name, your password)"

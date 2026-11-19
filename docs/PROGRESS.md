@@ -83,6 +83,10 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 
 ## Work log (newest first)
 
+### 19 Nov 2026 — Hosted site opened (no login)
+- The site no longer asks for a user name and password: `LATTICEIQ_PASSWORD` left empty in the server's `.env` (the program listens on 127.0.0.1 behind Caddy, so no code change was needed for that). The password can be switched back on there at any time.
+- Added: every response asks search engines not to index the site (`X-Robots-Tag: noindex, nofollow`) and `/robots.txt` disallows crawling, because the free price data is licensed for personal or research use. Login test extended (open mode, noindex, robots.txt). Docs updated: `deploy/aws/README.md`, README NFR-7, `decisions.md`.
+
 ### 18 Nov 2026 — Loading placeholders
 - First visit: grey shimmering placeholders in the page's own layout (market strip, stock list, overview or stock page, the analyst chart) instead of a blank screen, then a short fade-in. Checked with the data slowed to 2.5 s on a laptop, a phone and in dark mode.
 - Switching stocks: placeholders only if the stock takes over 0.15 s; stocks already opened appear at once (no flicker). Reduced motion turns the shimmer off. Tests: 51 pass.

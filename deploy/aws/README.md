@@ -6,7 +6,7 @@ One small Linux server runs the same program as on the PC (`python -m scripts.ru
 browser ──HTTPS──> Caddy (port 443, free certificate) ──> run_dashboard (127.0.0.1:8600, login) ──> data/ on the server
 ```
 
-**Private on purpose.** The price data (Yahoo) and FinBERT are licensed for research, not public use, so the site needs a login until licensed feeds and a legal review are in place.
+**Login optional.** With `LATTICEIQ_PASSWORD` set, every page asks for it; left empty, anyone with the address can open the site (since 19 Nov the hosted site runs this way). Either way the site asks search engines not to list it. The free price data (Yahoo; Alpaca's IEX prices) is licensed for personal or research use, so before promoting the site publicly, check those terms or move to a licensed feed.
 
 ## What it costs
 
@@ -49,7 +49,7 @@ powershell -ExecutionPolicy Bypass -File deploy\aws\upload_data.ps1 -Ip 13.54.0.
 
 It copies the frozen prices, fundamentals, SEC filings table, the trained model and the saved range fit (about 150 MB).
 
-### 4. Set the login and start
+### 4. Settings and start
 
 On the server:
 
@@ -57,11 +57,11 @@ On the server:
 nano ~/LatticeX/.env
 ```
 
-Fill in the two lines (Ctrl+O, Enter, Ctrl+X to save):
+Fill in the lines (Ctrl+O, Enter, Ctrl+X to save). Leave `LATTICEIQ_PASSWORD=` empty for an open site, or set it to ask every visitor for a password:
 
 ```
 SEC_USER_AGENT=Your Name your.email@example.com
-LATTICEIQ_PASSWORD=a long password only your team knows
+LATTICEIQ_PASSWORD=
 ```
 
 Optional, for prices in real time (IEX exchange, free Alpaca account; without them prices come from Yahoo and can be delayed): add your Alpaca keys on two more lines, `ALPACA_API_KEY=` and `ALPACA_API_SECRET=`, then restart. The log then says "(IEX real-time)" every 10 minutes during market hours.
@@ -73,7 +73,7 @@ sudo systemctl start latticeiq
 journalctl -u latticeiq -f        # watch it start (Ctrl+C stops watching, not the site)
 ```
 
-The first start downloads three years of prices and checks the SEC filings (5–10 minutes) before the site answers; until then the address shows an error. Open the address from step 2: any user name, your password.
+The first start downloads three years of prices and checks the SEC filings (5–10 minutes) before the site answers; until then the address shows an error. Open the address from step 2 (with a password set: any user name, your password).
 
 ## Day to day
 
@@ -83,7 +83,7 @@ The first start downloads three years of prices and checks the SEC filings (5–
 | What is it doing? | `journalctl -u latticeiq -n 50` |
 | Update the code after a push | `cd ~/LatticeX && git pull && sudo systemctl restart latticeiq` |
 | New trained model | copy `models\latticeiq_v1.npz` again with `upload_data.ps1`, then restart |
-| Change the password | edit `.env`, then `sudo systemctl restart latticeiq` |
+| Turn the login on, off or change it | edit `LATTICEIQ_PASSWORD=` in `.env` (empty = no login), then `sudo systemctl restart latticeiq` |
 | Stop paying | Lightsail › delete the instance **and** release the static IP |
 
 After each US close the server downloads the finished day, ranks the stocks and rebuilds the pages by itself, as on the PC.
@@ -99,5 +99,5 @@ After each US close the server downloads the finished day, ranks the stocks and 
 ## Known limits
 
 - **Yahoo from a data centre.** Daily prices come from Yahoo, which sometimes limits requests from cloud servers. If the log shows price downloads failing, the site keeps showing the last good day; the fix is a licensed price feed, which a commercial launch needs anyway.
-- **Basic login.** One shared password, sent only over HTTPS. Per-person logins (e.g. Cloudflare Access, free for 50 users, needs a domain) are the next step before showing it outside the team.
+- **Open or one shared password.** No per-person accounts. If access needs limiting later: the shared password, or per-person logins (e.g. Cloudflare Access, free for 50 users, needs a domain).
 - **One server.** No backup copy runs elsewhere. Everything on it can be rebuilt from the repository plus the files in step 3.
