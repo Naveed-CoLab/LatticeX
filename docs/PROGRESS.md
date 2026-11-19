@@ -1,6 +1,6 @@
 # LatticeIQ — Progress & TODO
 
-_Last updated: 17 Nov 2026 · Owner: project lead (all roles)_
+_Last updated: 19 Nov 2026 · Owner: project lead (all roles)_
 Rule: update this file every time something is finished, decided or found. Newest log entries at the top.
 **New to the project?** Read [`project-flow.md`](project-flow.md) first: the whole project as one step-by-step story with the status of each step. This file is the working to-do list and the day-by-day log.
 
@@ -8,7 +8,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 
 ## Where we are
 
-**Steps 1–10 of 15 done.** The ranking model v1.0 is chosen and measured (rank IC 0.015 / 0.020 / 0.020 at 5 / 20 / 60 days, 13 test years, audited list of 722 stocks), trained once on all data and run every day on the PC behind a three-page dashboard with live prices, price ranges, filings and analyst views. **Now (step 13): the model is final (v1.0 + range model v2) and the one-time 2025–26 holdout test is locked in [`holdout-lock.md`](holdout-lock.md); after it, the report and slides (by 28 Nov).** News sentiment was tested and not added; further improvement tests (insider purchases, SEC 8-K events) are future work.
+**Steps 1–11 of 15 done.** The ranking model v1.0 is chosen and measured (rank IC 0.015 / 0.020 / 0.020 at 5 / 20 / 60 days, 13 test years, audited list of 722 stocks), trained once on all data and run every day behind a three-page dashboard (real-time prices, score 1–10, price ranges, past calls, filings, analyst views), hosted on AWS and open without a login. **Now (step 13): the one-time 2025–26 holdout test under [`holdout-lock.md`](holdout-lock.md): price ranges passed (18 Nov), ranking running; then the report and slides (by 28 Nov).** News sentiment was tested and not added; further improvement tests (insider purchases, SEC 8-K events) are future work.
 
 | # | Step (details in [`project-flow.md`](project-flow.md)) | Status |
 |---|---|---|
@@ -31,7 +31,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 ## To do, in order
 
 1. [ ] **Rotate keys** pasted in chat (Benzinga, FRED, Hugging Face, Tiingo, Kaggle, Alpaca) and update `.env`. Then delete the `Claude outputs` folder on the PC (it holds old copies of `.env`; it is never committed).
-2. [ ] **Publish** the work since 14 Nov to GitHub (safety check first, see the README's quick start and `CONTRIBUTING.md`), then **host it**: `deploy/aws/README.md`.
+2. [x] **Published and hosted:** GitHub up to date; AWS Lightsail server since 18 Nov, open without a login since 19 Nov (`deploy/aws/README.md`). Still to do on the server: Alpaca keys in `.env` for real-time prices.
 3. [x] **News:** tested 17 Nov, not added (+0.003, paired t 1.29 / 0.83; `results.md` 5e). Next in the same slot: **insider purchases** from SEC Form 4.
 4. [ ] **Sector-neutral target** on Kaggle (`--target sector`) vs v1.0.
 5. [ ] **Price ranges on universe v2:** 5 and 20 days ran on 15 Nov (results to write up); 60 days failed on a typo, rerun: `python -m scripts.kaggle_cloud brackets "--data real --fundamentals --horizon 60"`. Then compare with the volatility range model.
@@ -42,7 +42,7 @@ Rule: update this file every time something is finished, decided or found. Newes
 10. [ ] FinText finance-pretrained Chronos: runner and comparison.
 11. [ ] ARIMA baseline (for the report).
 12. [ ] Retrain the daily model monthly or quarterly: `python -m scripts.kaggle_cloud final-model`.
-13. [ ] **Holdout test**, once: push `docs/holdout-lock.md` to GitHub first, then `python -m scripts.kaggle_cloud holdout --cpu` and `python -m scripts.holdout_ranges`.
+13. [ ] **Holdout test**, once: ranges ✅ passed 18 Nov. Ranking: `python -m scripts.kaggle_cloud download holdout --cpu`, then score it against `holdout-lock.md` section 5 and fill `results.md` 8b.
 14. [ ] **Report and slides.**
 
 ### Later / before a launch
@@ -82,6 +82,16 @@ Targets set on 6 Nov: rank IC 0.03–0.08 with t > 2, hit rate 52–56%. Reached
 ---
 
 ## Work log (newest first)
+
+### 19 Nov 2026 — Wrong closing prices for 18 Nov on the hosted site: found and fixed
+- Reported: closing prices on the site differed from other sites. Checked 12 stocks on the site against StockAnalysis's price history: 12–17 Nov matched exactly; **every 18 Nov close was wrong**, a late-morning price saved as the close (NVDA $152.82 vs the real $150.96, AMZN $262.63 vs $267.74, XOM $163.41 vs $160.58; volume a quarter to a third of the day's). The download waited for the close as designed; Yahoo served the cloud server a frozen mid-day bar (the same freeze behind the stuck $152.82 seen during the day).
+- Effect: the 18 Nov ranking, ranges and forecast log were made from those prices.
+- Fix: `live.verify_last_day` checks the newest day against Alpaca's consolidated daily bars (`alpaca_live.daily_bars`, free plan) and corrects any close Yahoo had not finished; without Alpaca keys it leaves out a day whose volume shows it was unfinished. A file saved before the check is checked once on the next start, so the server repairs 18 Nov by itself after the update, and re-ranks and rebuilds the pages. 52 tests pass (1 new).
+- `readme_shots.py` now uses the Edge or Chrome already installed (the Playwright browser download timed out on the PC).
+
+### 19 Nov 2026 — Screenshots of the product in the README; documents made consistent
+- New `scripts/readme_shots.py`: takes screenshots of the running dashboard (on the PC or the hosted site) in light and dark: stock page, Overview, Track record, phone. The README now opens with the real stock page and shows the other pages; the old illustration banner is no longer used.
+- Went through every document for statements that had gone out of date and fixed them: status and dates; the hosted server and the open site; real-time prices (IEX) and the holiday-aware clock; score 1–10 and past calls; the holdout (ranges passed, ranking running) instead of "locked"; news moved from "in testing" to "tested, not added"; test count 51 (was 43 in places); the product's range figures 79.3% / 79.0% / 79.1% (some pages still had 79.2% / 78.8% from the older filings file); a broken link in `methodology.md`; `results.md` sections in order; new data sources (Alpaca IEX, logos) listed.
 
 ### 19 Nov 2026 — Hosted site opened (no login)
 - The site no longer asks for a user name and password: `LATTICEIQ_PASSWORD` left empty in the server's `.env` (the program listens on 127.0.0.1 behind Caddy, so no code change was needed for that). The password can be switched back on there at any time.

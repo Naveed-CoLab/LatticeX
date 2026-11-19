@@ -64,6 +64,55 @@ def tidy(h: pd.DataFrame, ticker: str, last_day: pd.Timestamp) -> pd.DataFrame:
     return out.drop_duplicates("date").sort_values("date").reset_index(drop=True)[COLS]
 
 
+CLOSE_TOL = 0.005        # a Yahoo close more than 0.5% from the consolidated close is replaced
+VOL_SHARE = 0.8          # ... and so is a bar with less than 80% of the day's consolidated volume (not finished)
+UNFINISHED = 0.5         # without Alpaca: newest day dropped if its volume is under half the usual (median stock)
+CHECKED = "checked.json"
+
+
+def verify_last_day(px: pd.DataFrame, day, bars=None) -> tuple:
+    """Check the newest trading day in `px` before it is saved -> (prices, note).
+
+    Yahoo sometimes gives a data-centre server a frozen mid-day bar as a finished day: on 18 Nov 2026 every
+    close on the hosted site was a late-morning price (off by up to 2%, volume a quarter of the day's), while
+    earlier days were right. With Alpaca keys, each stock's newest bar is compared with Alpaca's consolidated
+    daily bar and replaced by it if the close differs by more than 0.5% or the volume shows the bar was not
+    finished. Without them, the newest day is left out (and fetched again later) if the median stock traded under
+    half its usual volume. `bars` is swappable for tests: bars(tickers, day) -> {ticker: bar}."""
+    day = pd.Timestamp(day)
+    on_day = px["date"] == day
+    if not on_day.any():
+        return px, ""
+    if bars is None:
+        from src.ingest import alpaca_live
+        bars = alpaca_live.daily_bars if alpaca_live.available() else None
+    got = bars(sorted(px.loc[on_day, "ticker"].unique()), day) if bars else {}
+    if len(got) >= 0.5 * on_day.sum():
+        px = px.copy()
+        px["volume"] = px["volume"].astype(float)
+        fixed = []
+        for i in px.index[on_day]:
+            b = got.get(px.at[i, "ticker"])
+            close = float(px.at[i, "close"])
+            if not b or not b["close"] or (abs(close / b["close"] - 1) <= CLOSE_TOL and px.at[i, "volume"] >= VOL_SHARE * b["volume"]):
+                continue
+            ratio = float(px.at[i, "adj_close"]) / close if close else 1.0          # dividend adjustment of that day
+            for col in ("open", "high", "low", "close", "volume"):
+                px.at[i, col] = b[col]
+            px.at[i, "adj_close"] = b["close"] * ratio
+            fixed.append(px.at[i, "ticker"])
+        note = (f"Checked {day:%a %d %b} against Alpaca's consolidated prices: {len(fixed)} of {int(on_day.sum())} "
+                f"closes corrected (Yahoo had not finished the day){': ' + ' '.join(fixed[:12]) + (' …' if len(fixed) > 12 else '') if fixed else ''}.")
+        return px, note
+    usual = (px[px["date"] < day].sort_values("date").groupby("ticker").tail(20).groupby("ticker")["volume"].median())
+    share = (px.loc[on_day].set_index("ticker")["volume"] / usual).replace([float("inf")], float("nan")).dropna()
+    if len(share) >= 10 and share.median() < UNFINISHED:
+        return (px[~on_day].reset_index(drop=True),
+                f"Yahoo's prices for {day:%a %d %b} look unfinished (volume {share.median():.0%} of usual); "
+                f"left out for now and fetched again later.")
+    return px, ""
+
+
 def _yahoo(ticker: str, start: str) -> pd.DataFrame:
     import yfinance as yf
     return yf.Ticker(ticker.replace(".", "-")).history(start=start, auto_adjust=False, actions=False)
@@ -194,8 +243,40 @@ def status() -> dict:
     return {"day": last.mode().iloc[0], "tickers": int(len(last)), "newest": last.max(), "names": set(last.index)}
 
 
-def update(force: bool = False, fetch=None) -> bool:
+def _checked_day():
+    f = LIVE / CHECKED
+    try:
+        return pd.Timestamp(json.loads(f.read_text(encoding="utf-8"))["day"]) if f.exists() else None
+    except (ValueError, KeyError):
+        return None
+
+
+def recheck(bars=None) -> bool:
+    """Check the newest day of the saved file once (files saved before the check existed, e.g. the 18 Nov 2026 one).
+    Only with Alpaca keys or a test `bars`. True if prices were corrected."""
+    from src.ingest import alpaca_live
+    have = status()
+    if not have or _checked_day() == have["newest"] or (bars is None and not alpaca_live.available()):
+        return False
+    px = load()
+    day = have["newest"]
+    got = (bars or alpaca_live.daily_bars)(sorted(px.loc[px["date"] == day, "ticker"].unique()), day)
+    if not got:                                              # Alpaca not answering: try again on the next start
+        return False
+    fixed, note = verify_last_day(px, day, lambda tickers, d: got)
+    if note:
+        print(note)
+    (LIVE / CHECKED).write_text(json.dumps({"day": f"{have['newest']:%Y-%m-%d}"}), encoding="utf-8")
+    if fixed.equals(px):
+        return False
+    fixed.to_parquet(FILE, index=False)
+    return True
+
+
+def update(force: bool = False, fetch=None, bars=None) -> bool:
     """Bring data/live/prices.parquet up to the last finished trading day. True if the file changed."""
+    if not force and recheck(bars):
+        return True
     want_day, have = last_close_day(), status()
     tickers = wanted_all()
     tried = LIVE / "tickers_asked.json"                     # what the last download asked for (some are never available)
@@ -216,8 +297,12 @@ def update(force: bool = False, fetch=None) -> bool:
         print(f"Price update failed for most tickers ({len(failed)} of {len(tickers)}). Is the internet connected? "
               f"Keeping the prices already on disk.")
         return False
+    px, note = verify_last_day(px, px["date"].max(), bars)
+    if note:
+        print(note)
     LIVE.mkdir(parents=True, exist_ok=True)
     px.to_parquet(FILE, index=False)
+    (LIVE / CHECKED).write_text(json.dumps({"day": f"{px['date'].max():%Y-%m-%d}"}), encoding="utf-8")
     tried.write_text(json.dumps(sorted(tickers)), encoding="utf-8")
     got = status()
     print(f"Prices updated: close of {got['day']:%a %d %b %Y} for {got['tickers']} tickers."

@@ -2,9 +2,9 @@
 
 This page tells the whole project as one sequence of steps: what we set out to do, what we did at each step, what came out, where the evidence is, and what is still ahead. It is written for a supervisor, a reviewer or a new team member, and it is updated whenever a step changes state.
 
-_Last updated: 16 Nov 2026._
+_Last updated: 19 Nov 2026._
 
-**In one paragraph.** LatticeIQ ranks every S&P 500 stock by how it is likely to do against the market (SPY) over the next 5, 20 and 60 trading days, and gives a calibrated range for where each price could be. The ranking model (v1.0, a small neural net) has a small but statistically significant edge over 13 test years (2012–2024), measured without any look-ahead on an audited list of index members. It now runs every day on one PC behind a three-page dashboard. We are testing whether news sentiment improves it. The 2025–26 data is locked for one final test.
+**In one paragraph.** LatticeIQ ranks every S&P 500 stock by how it is likely to do against the market (SPY) over the next 5, 20 and 60 trading days, and gives a calibrated range for where each price could be. The ranking model (v1.0, a small neural net) has a small but statistically significant edge over 13 test years (2012–2024), measured without any look-ahead on an audited list of index members. It runs every day behind a three-page dashboard, hosted on one AWS server. News sentiment was tested and not added. The model is final, and the 2025–26 data, kept out of every test until then, is being used once: the price ranges passed (18 Nov); the ranking result is pending.
 
 | Symbol | Meaning |
 |---|---|
@@ -34,9 +34,9 @@ flowchart TD
     classDef done fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef now fill:#fef3c7,stroke:#d97706,color:#78350f
     classDef next fill:#f1f5f9,stroke:#94a3b8,color:#334155
-    class S1,S2,S3,S4,S5,S6,S7,S8,S9,S10 done
-    class S11 now
-    class S12,S13,S14,S15 next
+    class S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11 done
+    class S13 now
+    class S12,S14,S15 next
 ```
 
 | # | Step | Status | When |
@@ -49,11 +49,11 @@ flowchart TD
 | 6 | Choose and lock v1.0 | ✅ | 12 Nov |
 | 7 | Find a data error, audit the data, re-measure | ✅ | 12–15 Nov |
 | 8 | Price ranges | ✅ | 8–15 Nov |
-| 9 | Dashboard | ✅ | 15–16 Nov |
-| 10 | Run it every day | ✅ | 16 Nov |
-| 11 | Improve the model, one test at a time | 🔄 | now |
+| 9 | Dashboard | ✅ | 15–19 Nov |
+| 10 | Run it every day (and host it) | ✅ | 16–19 Nov |
+| 11 | Improve the model, one test at a time | ✅ stopped (news not added); the rest is future work | 16–17 Nov |
 | 12 | Live track record | ⏳ | next |
-| 13 | Holdout test, once | ⏳ 🔒 | when the model is final |
+| 13 | Holdout test, once | 🔄 ranges passed; ranking running | 17 Nov on |
 | 14 | Report and presentation | ⏳ | by 28 Nov |
 | 15 | Before a launch | ⏳ | later |
 
@@ -84,7 +84,7 @@ flowchart TD
 - A Random Walk baseline that every model must beat.
 - Tests run on every push to GitHub.
 
-**Result.** 51 tests pass today. On random data the model shows no skill (t near 0); on planted momentum it finds it (rank IC 0.10, t 13).
+**Result.** 52 tests pass today. On random data the model shows no skill (t near 0); on planted momentum it finds it (rank IC 0.10, t 13).
 
 **Where.** `tests/test_pipeline.py`, `src/data/synthetic.py`, `src/eval/metrics.py`, [`architecture.md`](architecture.md#point-in-time-rules-no-look-ahead).
 
@@ -181,17 +181,19 @@ Weak spots: 2024 is negative at 20 and 60 days; 2019 and 2021 are about zero at 
 2. Tested a "chance of going up" from the same model: it lost to the plain historical rate (stocks rose 57% of the time), so it was **dropped**.
 3. Found that in weeks with an earnings report a one-size range held the price only 57% of the time.
 4. Built a simpler **volatility range model** with a separate width for earnings windows. Its 80% range held 79.5% / 79.0% / 79.1%, and 77–79% in earnings windows.
-5. Version 2 (17 Nov): a regression forecasts each stock's volatility (adding one-week volatility, the market's mood and the stock's typical earnings move), and the up and down sides are fitted separately. Same hit rate (79.2% / 78.8% / 79.1%), 2.2% / 3.4% / 4.9% narrower, better in 10–11 of 13 years. It also gives the last day's likely middle, high and low (each bound held 88.7–90.5% against an aim of 90%). This is the one in the product.
+5. Version 2 (17 Nov): a regression forecasts each stock's volatility (adding one-week volatility, the market's mood and the stock's typical earnings move), and the up and down sides are fitted separately. Same hit rate (79.3% / 79.0% / 79.1% on 2012–2024), 2–5% narrower, better in 10–11 of 13 years. On the unseen 2025–26 data it held 78.9% / 78.1% / 77.8% and passed every band set before the test (step 13). It also gives the last day's likely middle, high and low (each bound held 88.7–90.5% against an aim of 90%). This is the one in the product.
 
 **Where.** `src/models/vol_ranges.py`, `scripts/run_brackets.py`, [`architecture.md`](architecture.md#price-ranges).
 
 ## Step 9. Dashboard ✅
 
-**What we built.** A local website with three pages:
+**What we built.** A website with three pages, run on the PC or on a server:
 
 - **Overview:** stocks up and down, two-week earnings calendar, biggest moves, calmest and wildest stocks, highest and lowest ranked, important filings.
-- **Stocks:** today's price, the three ranges for 5 / 20 / 60 days, a chart with the range cone ahead and earnings marks, the model's rank against the market and what that rank did in testing, recent filings, and analysts' price targets (labelled as opinions, not tested).
-- **Track record:** every range replayed on 2012–2024, said versus done, year by year.
+- **Stocks:** today's price, the model's score from 1 to 10 against the market and how often each score beat the S&P 500 in testing, the three ranges for 5 / 20 / 60 days with their holdout hit rate, a chart with the range cone ahead, earnings marks and past calls, recent filings, and analysts' price targets (labelled as opinions, not tested).
+- **Track record:** every range replayed on 2012–2024 and scored on 2025–26, said versus done, year by year, and the record of each score.
+
+The pictures in the [README](../README.md) are screenshots of it.
 
 **Where.** `app/`, `scripts/export_dashboard.py`, [`../app/README.md`](../app/README.md).
 
@@ -201,9 +203,9 @@ Weak spots: 2024 is negative at 20 and 60 days; 2019 and 2021 are about zero at 
 
 **What we built.**
 
-- A separate daily price file (three years, replaced after every close) and delayed prices during market hours; the ranges follow the price during the day.
+- A separate daily price file (three years, replaced after every close) and prices during market hours: real time from the IEX exchange (Alpaca, free) or delayed from Yahoo; the ranges follow the price during the day.
 - **Train once, score daily:** v1.0 is trained once on all data on Kaggle (6 minutes) and saved; after every close the PC ranks every stock with plain NumPy, using the same feature code as the research. Every day's forecasts are written to a dated log before their outcomes are known.
-- A local server that does all of this by itself and reloads the page after each close.
+- A server that does all of this by itself and reloads the page after each close. Since 18 Nov the same program runs on an AWS Lightsail server (1 GB, $7 a month) behind HTTPS; since 19 Nov it is open without a login ([`../deploy/aws/README.md`](../deploy/aws/README.md)).
 
 **Result.** One command, `python -m scripts.run_dashboard`, keeps everything current.
 
@@ -211,7 +213,7 @@ Weak spots: 2024 is negative at 20 and 60 days; 2019 and 2021 are about zero at 
 
 **Where.** `src/models/production.py`, `src/ingest/live.py`, `scripts/run_dashboard.py`, [`architecture.md`](architecture.md#daily-model-train-once-score-daily), [`results.md`](results.md) section 0c.
 
-## Step 11. Improve the model, one test at a time 🔄
+## Step 11. Improve the model, one test at a time ✅ (stopped 17 Nov)
 
 **Rule.** An addition is kept only if it beats v1.0 on the same test years by clearly more than chance (two near-identical runs differ by 0.0005–0.0008 over 13 years), in most years.
 
@@ -225,17 +227,23 @@ Weak spots: 2024 is negative at 20 and 60 days; 2019 and 2021 are about zero at 
 | Recovery after a crash | Code written | Run on Kaggle against the historical rate |
 | Volatility ranges vs quantile XGBoost on universe v2 | ⏳ | One Kaggle run, scored on interval score |
 
+On 17 Nov the model was declared final so the holdout test could run before the report; the remaining candidates are future work.
+
 **Where.** [`decisions.md`](decisions.md) (v1.1 candidates), [`PROGRESS.md`](PROGRESS.md) (current to-do).
 
 ## Step 12. Live track record ⏳
 
 Score each logged daily forecast once its outcome is known (5, 20, 60 trading days later) and show the running result on the Track record page. This is the only evidence that cannot be affected by any choice we made, because the forecasts are on record before the outcome exists. Needs at least a week of logs to start.
 
-## Step 13. Holdout test, once ⏳ 🔒
+## Step 13. Holdout test, once 🔄
 
 When the model is final: train v1.0 (and the secondary ensemble) on data up to the end of 2024, score 2025–26 once, and publish the result whatever it is. Nothing has been tested, tuned or chosen on this period. The setting is `holdout_start` in `config/settings.yaml`.
 
 **Locked on 17 Nov 2026.** The model is final (v1.0 for ranking, range model v2 for the ranges). The rules were written down before the run in [`holdout-lock.md`](holdout-lock.md): what is tested, on which data, the exact commands and what counts as passing. The holdout is short (about 90 weekly dates), so even a real edge is expected to show t ≈ 1.2: the main question is whether the 20-day rank IC is above zero. Run with `python -m scripts.kaggle_cloud holdout --cpu` and `python -m scripts.holdout_ranges`; both refuse a second run.
+
+**Price ranges: passed (18 Nov).** The "4 in 5" range held 78.9% / 78.1% / 77.8% at 5 / 20 / 60 days (band 75–85%); 50%, 90% and the day's high and low all inside their bands. v1, the secondary, held about 80% everywhere; v2's upward tilt was too strong for 2025–26. Nothing was changed, as the rules require. [`results.md`](results.md) section 8a.
+
+**Ranking: running** on Kaggle; the result will be published here whatever it is.
 
 ## Step 14. Report and presentation ⏳
 
@@ -245,7 +253,7 @@ Data, method, results with their limits, the data error and how it was handled, 
 
 - Licensed price and news data keyed by a permanent security ID (the free sources used here are for research only).
 - A sentiment model licensed for commercial use (FinBERT is non-commercial).
-- Hosting, accounts and an API; a chat assistant that explains the model's forecast and never makes up its own.
+- Per-person accounts and an API (hosting is done); a chat assistant that explains the model's forecast and never makes up its own.
 - Legal review of every performance statement; no investment advice.
 
 ---
@@ -254,9 +262,9 @@ Data, method, results with their limits, the data error and how it was handled, 
 
 | Question | How to check |
 |---|---|
-| Is there look-ahead? | `pytest -q` runs 51 tests, including "random data shows no skill"; GitHub Actions runs them on every push |
+| Is there look-ahead? | `pytest -q` runs 52 tests, including "random data shows no skill"; GitHub Actions runs them on every push |
 | Are the numbers real? | Each run's settings and metrics are in `results/<run>/`; runs `20261114_0752`, `0809`, `0827` hold the v1.0 headline numbers |
-| Was the holdout used? | `holdout_start: "2025-01-01"` in `config/settings.yaml` is enforced by `src/folds.py`; there is a test for it |
+| Was the holdout used? | Only once, after the model was final: `holdout_start: "2025-01-01"` in `config/settings.yaml` is enforced by `src/folds.py` (with a test), and the rules and run log are in [`holdout-lock.md`](holdout-lock.md) |
 | What do we claim? | The claims table in the [README](../README.md#what-we-claim-and-what-we-dont): what we say, what we do not, and why |
 | How does it compare? | [`market-comparison.md`](market-comparison.md): what other tools and published research report, and how they measure it |
 

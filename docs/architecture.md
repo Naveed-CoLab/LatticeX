@@ -2,7 +2,7 @@
 
 How LatticeIQ turns raw data into forecasts, how it serves them every day, and how it avoids fooling itself. The overview, the component table, the server interface and the list of data files are in the main [`README`](../README.md#system-architecture); this page holds the design detail behind them. The methods explained in plain words, with the research behind each, are in [`methodology.md`](methodology.md).
 
-Contents: [Two halves](#two-halves-of-the-system) · [Research pipeline](#research-pipeline) · [Targets](#targets) · [Features](#features) · [Ranking model v1.0](#ranking-model-v10) · [Evaluation rules](#evaluation-rules) · [Point-in-time rules](#point-in-time-rules-no-look-ahead) · [Price ranges](#price-ranges) · [Daily model](#daily-model-train-once-score-daily) · [Daily prices](#daily-prices) · [Local server](#local-server) · [Dashboard](#dashboard) · [Failure handling](#failure-handling) · [Compute](#compute)
+Contents: [Two halves](#two-halves-of-the-system) · [Research pipeline](#research-pipeline) · [Targets](#targets) · [Features](#features) · [Ranking model v1.0](#ranking-model-v10) · [Evaluation rules](#evaluation-rules) · [Point-in-time rules](#point-in-time-rules-no-look-ahead) · [Price ranges](#price-ranges) · [Daily model](#daily-model-train-once-score-daily) · [Daily prices](#daily-prices) · [Server](#server) · [Dashboard](#dashboard) · [Failure handling](#failure-handling) · [Compute](#compute)
 
 ## Two halves of the system
 
@@ -10,7 +10,7 @@ Contents: [Two halves](#two-halves-of-the-system) · [Research pipeline](#resear
 |---|---|---|
 | Purpose | Decide which model and features work, and prove it | Serve the chosen model every day |
 | Data | Frozen files in `data/clean/` ("universe v2", prices to 5 Nov 2026) | `data/live/`: three years of closing prices, replaced after every close |
-| Runs | On Kaggle's GPU, started from the PC | On the PC |
+| Runs | On Kaggle's GPU, started from the PC | On the PC, or on the AWS server ([`../deploy/aws/`](../deploy/aws/README.md)) |
 | Models | Retrained inside every test year, never saved | One saved file, `models/latticeiq_v1.npz` |
 | Output | `results/<run>/` | `data/live/rank.json`, `app/data/*.json`, the dashboard |
 
@@ -25,7 +25,7 @@ flowchart TD
         E["edgar.py<br/>10-K / 10-Q values + filing dates"]
         V["sec_events.py<br/>8-K filings by event type"]
         F["fred.py<br/>macro with release dates (tested, not used)"]
-        N["alpaca_news.py<br/>news, in testing"]
+        N["alpaca_news.py<br/>news (tested, not added)"]
     end
     subgraph Clean["2. Clean  (src/data, src/universe.py)"]
         C["align_to_calendar<br/>SPY trading days, fill gaps up to 5 days"]
@@ -86,7 +86,7 @@ Targets are clipped at the 1st and 99th percentile per date before training; met
 
 Sectors come from prices alone: each month-end a stock is assigned to the sector fund (XLK, XLF, XLE…) its returns followed most closely over the past year after removing the market move. No outside classification is needed and the label is known on that date.
 
-Tested and not used: macro (8, `macro.py`), Kronos forecasts (2) and TimesFM forecasts (3) (`pretrained.py`). In testing: news (8, `news.py`). Reasons and numbers: [`decisions.md`](decisions.md).
+Tested and not used: macro (8, `macro.py`), Kronos forecasts (2) and TimesFM forecasts (3) (`pretrained.py`). Tested and not added: news (8, `news.py`). Reasons and numbers: [`decisions.md`](decisions.md).
 
 ## Ranking model v1.0
 
@@ -107,7 +107,7 @@ Tested and not used: macro (8, `macro.py`), Kronos forecasts (2) and TimesFM for
 | Walk-forward: train on all years before the test year, test one calendar year, 2012 → 2024 | `src/folds.py` |
 | 60-trading-day gap between the last training date and the first test date (at least the longest horizon, so no target overlaps) | `config/settings.yaml` |
 | Every model is scored on the same weekly date grid (`eval_step: 5`) | `src/folds.py:eval_dates` |
-| Holdout from 2025-01-01 is excluded everywhere until the model is final | `holdout_start` in settings |
+| Holdout from 2025-01-01 is excluded everywhere; used once after the model was final ([`holdout-lock.md`](holdout-lock.md)) | `holdout_start` in settings |
 | Rank IC t-statistics use Newey-West standard errors (targets overlap) | `src/eval/metrics.py` |
 | Model vs Random Walk compared with Diebold-Mariano + HLN correction | `src/eval/metrics.py` |
 | An add-on counts only if it beats v1.0 by clearly more than chance (two near-identical runs differ by 0.0005–0.0008 over 13 years and up to 0.015 in a single year), in most years, in the same Kaggle job | [`results.md`](results.md), section 0 |
@@ -125,7 +125,7 @@ Tested and not used: macro (8, `macro.py`), Kronos forecasts (2) and TimesFM for
 | Macro (FRED) | Each value usable only from its release date (ALFRED vintages); market series the next day |
 | Kronos, TimesFM | Forecast made at *t* from data up to *t*, carried forward at most 31 days, never backwards |
 
-Each rule has a test in `tests/test_pipeline.py` (51 tests). The two key sanity tests:
+Each rule has a test in `tests/test_pipeline.py` (52 tests). The two key sanity tests:
 
 - **Random data → no skill.** On pure noise the model must show a rank IC t-statistic near 0. A "win" here means leakage.
 - **Planted signal → found.** On data with a built-in momentum effect, the model must find it (t > 3).
@@ -179,7 +179,7 @@ Retraining monthly or quarterly is enough; the server notices a new model file a
 
 ## Daily prices
 
-`src/ingest/live.py`, source Yahoo Finance.
+`src/ingest/live.py` (closing prices, Yahoo Finance) and `src/ingest/alpaca_live.py` (prices during the day and the market clock, Alpaca).
 
 | Rule | Detail |
 |---|---|
@@ -187,21 +187,22 @@ Retraining monthly or quarterly is enough; the server notices a new model file a
 | How much | Three years, replaced in full on every update, so splits and dividends stay consistent |
 | When a day counts as finished | 16:20 New York time on a weekday; an unfinished day is never written to the file |
 | When to download | When the file's last day is older than the last finished day; after a check that found nothing newer (a holiday), not again for 3 hours |
-| Today so far | `quotes()` returns only bars after the last finished day: open, high, low, last, volume, previous close. Delayed by up to 15 minutes |
-| Market hours | 9:30 to 16:00 New York, Monday to Friday; holidays are not known |
+| Checking the newest day | Yahoo can serve a server a frozen mid-day bar as the finished day (found 18 Nov 2026: every close a late-morning price, off by up to 2%). Before saving, each stock's newest bar is compared with Alpaca's consolidated daily bar (all exchanges; free once 15 minutes old) and replaced if the close differs by more than 0.5% or the volume is under 80% of the day's. Without Alpaca keys the newest day is left out, and fetched again later, if the median stock traded under half its usual volume. A file saved before this check is checked once on the next start (`verify_last_day`, `recheck`) |
+| Today so far | With Alpaca keys: IEX snapshots, up to 100 symbols a request, under 150 requests a minute (the free plan allows 200); the change is measured from our own last close and IEX volume is not shown. Otherwise, or if Alpaca fails: Yahoo, `quotes()`, delayed by up to 15 minutes. Only bars after the last finished day are returned |
+| Market hours | With Alpaca keys: Alpaca's market clock (knows holidays and early closes), cached for a minute. Otherwise 9:30 to 16:00 New York, Monday to Friday, holidays not known |
 
-## Local server
+## Server
 
-`scripts/run_dashboard.py`: Python's standard `http.server` on `127.0.0.1:8600`, one background thread.
+`scripts/run_dashboard.py`: Python's standard `http.server` on `127.0.0.1:8600`, one background thread; the daily ranking runs in its own process (`scripts.score_today`, about 1.8 GB for a minute) so its memory is returned afterwards. On AWS it listens on `127.0.0.1` behind Caddy, which adds HTTPS. `LATTICEIQ_PASSWORD` in `.env` turns on a shared password (HTTP Basic); empty means open. Every response carries `X-Robots-Tag: noindex` and `/robots.txt` disallows crawling.
 
 **On start:** update prices → update SEC filings (at most once in 20 hours) → rank with the saved model (only if prices or the model are newer than the last ranking) → rebuild the page data if any input is newer than it → start the background thread → open the browser. Each step is allowed to fail; the server then opens with the data on disk. `--no-update` skips all downloads.
 
-**Background thread (every minute):**
+**Background thread (every 10 seconds with IEX, every minute otherwise):**
 
-- market open: fetch today's prices for all stocks every 10 minutes;
+- market open: fetch today's prices for all stocks, every 30 seconds from IEX or every 10 minutes from Yahoo;
 - last finished day newer than the file (checked at most every 30 minutes): download it, rank again, rebuild the page data, clear the day's quotes.
 
-**Endpoints:** `/api/today`, `/api/quote?t=`, `/api/analysts?t=` (see the README). `/api/quote` fetches one stock at most every 20 seconds. `/api/today` includes the time the page data was built; when it changes, the page reloads. Responses are never cached.
+**Endpoints:** `/api/today`, `/api/quote?t=`, `/api/analysts?t=` (see the README). `/api/quote` fetches one stock at most every 2 seconds from IEX, or every 20 seconds from Yahoo. `/api/today` includes the time the page data was built; when it changes, the page reloads. Responses are never cached.
 
 ## Dashboard
 
@@ -211,9 +212,10 @@ Retraining monthly or quarterly is enough; the server notices a new model file a
 |---|---|
 | Pages | Overview, Stocks, Track record, switched by the address after `#` |
 | Data | `app/data/index.json` (one row per stock) on load; `app/data/stocks/<T>.json` when a stock is opened; `track.json` for the track record |
-| Live prices | Asks `/api/today` every 30 seconds and `/api/quote` for the open stock every 20 seconds; repaints the price, the ranges, the cone and the ladder |
+| Live prices | Asks `/api/today` every 30 seconds and `/api/quote` for the open stock every 2–3 seconds (IEX) or 20 seconds (Yahoo); repaints the price (changed digits roll, green or red briefly), the ranges, the cone and the ladder |
+| First load | Grey placeholders in the page's layout until the data arrives, then a short fade-in; on a stock switch only if loading takes over 0.15 s |
 | Chart | Line or candles, volume, a custom cone drawing for the three ranges, marks for the period's high and low and for earnings days |
-| Kept in the browser | Theme, starred stocks, chart type, volume on or off (`localStorage`); nothing is sent anywhere |
+| Kept in the browser | Theme, starred stocks, filters, chart type, volume and past calls on or off (`localStorage`); nothing is sent anywhere |
 | Logos | Loaded by the browser from an outside logo service by company web address; never stored in the project |
 | Layout | One scrolling page with a fixed stock list and side panel on wide screens; single column on phones; light and dark themes |
 
@@ -233,4 +235,4 @@ Details of each card: [`../app/README.md`](../app/README.md).
 
 ## Compute
 
-Data downloads, daily scoring and the dashboard run on a laptop. GPU jobs (training, walk-forward experiments, Kronos, TimesFM, sentiment scoring) run on Kaggle through `scripts/kaggle_cloud.py`: it uploads `data/clean/` as a private dataset, pushes the repo code as a notebook, waits, and downloads the output. See [`kaggle-workflow.md`](kaggle-workflow.md).
+Data downloads, daily scoring and the dashboard run on a laptop or a 1 GB server (with 2 GB of swap for the one-minute ranking). GPU jobs (training, walk-forward experiments, Kronos, TimesFM, sentiment scoring) run on Kaggle through `scripts/kaggle_cloud.py`: it uploads `data/clean/` as a private dataset, pushes the repo code as a notebook, waits, and downloads the output. See [`kaggle-workflow.md`](kaggle-workflow.md).

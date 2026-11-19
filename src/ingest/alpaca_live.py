@@ -9,6 +9,7 @@ the page labels these "IEX real-time" and does not show IEX volume as the day's 
   * snapshots(tickers, prev) -> {ticker: quote}  latest IEX trade plus IEX's high and low so far today, in the
     same shape as live.quotes(); `prev` is our own last close (IEX's previous close is only IEX's last trade).
   * clock() -> {is_open, next_open, next_close} from Alpaca's trading API, which knows market holidays.
+  * daily_bars(tickers, day) -> {ticker: bar}  the day's consolidated bar (all exchanges), used to check closes.
 Both stay under a call budget well below the plan's limit and return {} / None on any failure.
 """
 import threading
@@ -100,6 +101,44 @@ def snapshots(tickers: list, prev: dict, after: str, get=None) -> dict:
             q = parse(j.get(t.replace("-", ".")), t, after, prev.get(t))
             if q:
                 out[t] = q
+    return out
+
+
+BARS = "https://data.alpaca.markets/v2/stocks/bars"
+
+
+def daily_bars(tickers: list, day, get=None) -> dict:
+    """{ticker: {open, high, low, close, volume}} for one finished trading day, from all US exchanges (SIP feed).
+    The free plan allows SIP history once it is more than 15 minutes old, so this is used after the close to check
+    the closing prices that came from Yahoo. Prices are unadjusted (as traded that day). {} on any failure."""
+    get = get or (lambda url, params, headers: requests.get(url, params=params, headers=headers, timeout=20).json())
+    d = f"{pd.Timestamp(day):%Y-%m-%d}"
+    start = pd.Timestamp(d, tz="America/New_York")
+    end = min(start + pd.Timedelta(hours=23, minutes=59), pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=16))
+    span = {"start": f"{start.tz_convert('UTC'):%Y-%m-%dT%H:%M:%SZ}", "end": f"{end.tz_convert('UTC'):%Y-%m-%dT%H:%M:%SZ}"}
+    alias = {t.replace("-", "."): t for t in tickers}
+    syms, out = list(alias), {}
+    for i in range(0, len(syms), 200):
+        token = None
+        while True:
+            if not BUDGET.take():
+                return out
+            params = {"symbols": ",".join(syms[i:i + 200]), "timeframe": "1Day", **span,
+                      "feed": "sip", "adjustment": "raw", "limit": 10000}
+            if token:
+                params["page_token"] = token
+            try:
+                j = get(BARS, params, _headers()) or {}
+            except Exception:
+                break
+            for sym, rows in (j.get("bars") or {}).items():
+                for b in rows or []:
+                    if sym in alias and b.get("c") and b.get("t") and _ny_day(b["t"]) == d:
+                        out[alias[sym]] = {"open": float(b["o"]), "high": float(b["h"]), "low": float(b["l"]),
+                                           "close": float(b["c"]), "volume": float(b["v"])}
+            token = j.get("next_page_token")
+            if not token:
+                break
     return out
 
 

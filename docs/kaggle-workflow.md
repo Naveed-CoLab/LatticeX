@@ -38,6 +38,7 @@ sequenceDiagram
 | `fundamentals-download` | SEC EDGAR download | CPU |
 | `final-model` | Train v1.0 on all data and save `models/latticeiq_v1.npz` (the daily model) | ~6 min |
 | `news-score` | Sentiment score for every news article (FinBERT) | depends on the number of articles |
+| `holdout --cpu` | The one-time 2025–26 ranking test, with the fixed commands in `HOLDOUT_STEPS` ([`holdout-lock.md`](holdout-lock.md)); refuses a second run | CPU |
 | `news-download --start 2015-01 --end 2019-12` | Old Benzinga plan download (replaced by `python -m src.ingest.alpaca_news` on the PC) | CPU |
 | `status <job>` / `download <job>` | Check / fetch a job | — |
 

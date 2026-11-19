@@ -36,9 +36,9 @@ Measured walk-forward on the audited S&P 500 list (722 stocks, test years 2012�
 | Years with positive rank IC | 12 of 13 | 10 of 13 | 10 of 13 |
 | Top 20% of the ranking beat the S&P 500 | 50.2% | 49.9% | 50.1% |
 | Bottom 20% of the ranking beat the S&P 500 | 48.4% | 47.7% | 47.4% |
-| 80% price range contains the real price | 79.5% | 79.0% | 79.1% |
+| 80% price range contains the real price (range model v2) | 79.3% | 79.0% | 79.1% |
 
-Price ranges: the volatility range model now on the dashboard (v2 since 17 Nov), replayed on the audited list (about 306,000 forecasts per horizon): 80% range held 79.2% / 78.8% / 79.1%, 2.2% / 3.4% / 4.9% narrower than v1. The first range model held 79.8% / 80.3% / 80.2% (80% range) and 90.0% / 90.4% / 90.8% (90% range) on the earlier 634-stock list.
+Price ranges: the volatility range model now on the dashboard (v2 since 17 Nov), replayed on the audited list (about 306,000 forecasts per horizon): 80% range held 79.3% / 79.0% / 79.1%, 2–5% narrower than v1; on the unseen 2025–26 data 78.9% / 78.1% / 77.8%, inside the band set before the test. The first range model held 79.8% / 80.3% / 80.2% (80% range) and 90.0% / 90.4% / 90.8% (90% range) on the earlier 634-stock list.
 
 **Measured the way competitors advertise** (how the top-ranked group did against the index): our top 20% beat the S&P 500 about half the time, the bottom 20% clearly less often. The top group matches the market; the bottom group lags it by 0.46% per 20 days relative to the top, in 11 of 13 years. So today LatticeIQ is better at flagging likely laggards than at picking winners. Closing that gap is the main accuracy goal, and this number is reported for every model change.
 
@@ -50,7 +50,7 @@ Price ranges: the volatility range model now on the dashboard (v2 since 17 Nov),
 | Test period | Often the same years the model was tuned on; mostly a rising market since 2017 | 13 separate years, each forecast by a model trained only on earlier data, with a 60-day gap |
 | Benchmark | Sometimes none (a "win" = the stock went up) | Always against the S&P 500 (SPY) |
 | Costs | Sometimes included | Not a trading strategy; no return claim is made |
-| Untouched final test | Rarely | 2025–26 holdout, to be run once |
+| Untouched final test | Rarely | 2025–26 holdout, rules committed before the run; ranges passed, ranking pending |
 | Data problems disclosed | Rarely | Yes: coverage of the true index is 91% in the test years, 67% in early training years ([`data-sources.md`](data-sources.md)) |
 
 ## 4. How to read any accuracy claim

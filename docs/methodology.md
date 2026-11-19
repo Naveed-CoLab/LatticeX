@@ -2,7 +2,7 @@
 
 How LatticeIQ forecasts, how it is tested, and the published research each choice rests on. Written so that a reader with no finance background can follow it; every method has a "why" and a source. Numbers are from our own test runs (files in [`../results/`](../results/)); references are listed at the end.
 
-Contents: [The question](#1-the-question) · [Data](#2-data-without-hindsight) · [Inputs](#3-inputs-features) · [Model](#4-the-model) · [Testing](#5-how-we-test) · [Scores](#6-how-we-score) · [Price ranges](#7-price-ranges) · [Dropped methods](#8-methods-we-tested-and-dropped-and-why) · [News](#9-news-sentiment-in-testing) · [Limits](#10-limits) · [References](#references)
+Contents: [The question](#1-the-question) · [Data](#2-data-without-hindsight) · [Inputs](#3-inputs-features) · [Model](#4-the-model) · [Testing](#5-how-we-test) · [Scores](#6-how-we-score) · [Price ranges](#7-price-ranges) · [Dropped methods](#8-methods-we-tested-and-dropped-and-why) · [News](#9-news-sentiment-tested-not-adopted) · [Limits](#10-limits) · [References](#references)
 
 ## 1. The question
 
@@ -70,7 +70,7 @@ Sectors are worked out from prices alone: each month a stock is assigned to the 
 
 **Same dates for every model.** All models are scored on the same weekly dates (every fifth trading day), so differences come from the models, not the sample.
 
-**A locked holdout.** Everything from 1 January 2025 is excluded from all tests and decisions. It will be used once, when the model is final, under rules written down before the run ([`holdout-lock.md`](holdout-lock.md)). Trying many variants on the same data and keeping the best one inflates results (Bailey, Borwein, López de Prado & Zhu 2014); an untouched holdout is the guard against that. One choice was made after seeing test results (the neural net alone over a pre-declared ensemble); we say so openly and both will be scored on the holdout.
+**A locked holdout.** Everything from 1 January 2025 is excluded from all tests and decisions. It is used once, after the model was final, under rules written down before the run ([`holdout-lock.md`](holdout-lock.md)). The price ranges passed on 18 Nov ("4 in 5" range held 78.9% / 78.1% / 77.8%); the ranking result is pending. Trying many variants on the same data and keeping the best one inflates results (Bailey, Borwein, López de Prado & Zhu 2014); an untouched holdout is the guard against that. One choice was made after seeing test results (the neural net alone over a pre-declared ensemble); we say so openly and both will be scored on the holdout.
 
 **A bar for improvements.** Two runs that differed by only five stocks moved the 13-year score by 0.0005–0.0008 and single years by up to 0.015. An addition counts only if it beats the current model by clearly more than that, in most years, in the same run.
 
@@ -100,7 +100,7 @@ Sectors are worked out from prices alone: each month a stock is assigned to the 
 5. Separate multipliers apply when an earnings report is expected inside the window. In our data stocks move about 1.7 times more in earnings weeks; a one-size range held the price only 57% of the time there.
 6. For the last day of the window the page also shows the likely middle and how high and how low that day's trading may reach (each bound aimed at 9 times in 10).
 
-**Result (2012–2024, about 306,000 forecasts per horizon):** the "4 in 5" range held 79.2% / 78.8% / 79.1% at 5 / 20 / 60 days, 2.2% / 3.4% / 4.9% narrower than version 1 (a blend of four measures × one multiplier per side), which held 79.5% / 79.0% / 79.1%. The interval score was better in 11, 11 and 10 of 13 years. In earnings windows 77–79%. "Day's high below X" held 88.7–89.6% and "low above Y" 89.6–90.5%.
+**Result (2012–2024, about 306,000 forecasts per horizon):** the "4 in 5" range held 79.3% / 79.0% / 79.1% at 5 / 20 / 60 days, 2–5% narrower than version 1 (a blend of four measures × one multiplier per side), which held 79.5% / 79.0% / 79.1%. The interval score was better in 11, 11 and 10 of 13 years. In earnings windows 77–79%. "Day's high below X" held 88.7–89.6% and "low above Y" 89.6–90.5%. On the unseen 2025–26 data: 78.9% / 78.1% / 77.8%, with every pre-set band passed.
 
 **The first model, for comparison:** quantile regression with XGBoost (Chen & Guestrin 2016) predicts several percentiles of the outcome; conformalised quantile regression then widens or narrows them using the previous years so the coverage is right (Romano, Patterson & Candès 2019). It held 79.8% / 80.3% / 80.2% on the earlier stock list. A planned improvement is adaptive calibration that recovers faster after shocks such as March 2020 (Gibbs & Candès 2021).
 

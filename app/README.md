@@ -1,6 +1,6 @@
 # Dashboard
 
-A local site for the S&P 500: a market overview, a page for any stock, and a track record.
+A website for the S&P 500: a market overview, a page for any stock, and a track record. It runs on the PC (below) or on a server ([`../deploy/aws/README.md`](../deploy/aws/README.md)). Screenshots are in the main [README](../README.md#the-product).
 
 ```bash
 python -m scripts.run_dashboard               # update if a newer trading day exists, then open http://localhost:8600

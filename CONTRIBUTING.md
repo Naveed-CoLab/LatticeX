@@ -3,7 +3,7 @@
 ## Ground rules
 
 1. **No look-ahead.** A feature on date *t* may only use data public by the close of *t*. Add a test for every new feature.
-2. **Never use 2025–26 data** before the final model freeze (`holdout_start` in `config/settings.yaml`).
+2. **Never use 2025–26 data to test, tune or choose anything** (`holdout_start` in `config/settings.yaml`). It was used once, for the final test under `docs/holdout-lock.md`; a new model version needs a new test on newer data.
 3. **Every model is scored by `src/eval/metrics.py`** on the same weekly date grid.
 4. **A feature group stays only if it improves rank IC** across folds (ablation), recorded in `docs/results.md`.
 5. **`pytest -q` must pass** before every commit. GitHub Actions runs it on every push.

@@ -13,5 +13,8 @@ Only small summary files are committed; `predictions.parquet` and logs stay loca
 | `shrink.csv` | Shrinkage factor chosen per fold |
 | `bracket_metrics.csv` | Brackets: coverage, width, pinball, Brier (bracket runs) |
 | `coverage_by_year.csv`, `conformal_shifts.csv` | Bracket calibration details |
+| `rank_groups_h<h>.csv` | How each fifth of the ranking did against SPY |
+| `rank_scores_h<h>.csv` | How each score 1–10 did against SPY (`scripts/rank_scores.py`; shown on the dashboard) |
+| `*_HOLDOUT/` | The one-time 2025–26 test (`docs/holdout-lock.md`); for the ranges `summary.json` and `by_quarter.csv` |
 
 Runs before 9 Nov 2026 used an earlier, smaller pipeline and are kept locally only.

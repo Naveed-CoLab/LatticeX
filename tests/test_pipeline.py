@@ -668,14 +668,71 @@ def test_live_update_keeps_finished_days_only_and_survives_missing_tickers(tmp_p
     monkeypatch.setattr(live, "LIVE", tmp_path)
     monkeypatch.setattr(live, "FILE", tmp_path / "prices.parquet")
     monkeypatch.setattr(live, "wanted_all", lambda: ["AAA", "BBB", "CCC"])
-    assert live.update(fetch=fake) is True
+    no_alpaca = lambda tickers, day: {}                                # tests never call Alpaca
+    assert live.update(fetch=fake, bars=no_alpaca) is True
     assert live.status()["tickers"] == 3 and live.status()["day"] == px["date"].max()
-    assert live.update(fetch=fake) is False                            # already current: nothing downloaded again
+    assert live.update(fetch=fake, bars=no_alpaca) is False            # already current: nothing downloaded again
     # if most tickers fail (no internet), the file on disk is kept as it is
     monkeypatch.setattr(live, "wanted_all", lambda: ["BOOM", "GONE", "AAA"])
     before = (tmp_path / "prices.parquet").stat().st_mtime_ns
-    assert live.update(force=True, fetch=fake) is False
+    assert live.update(force=True, fetch=fake, bars=no_alpaca) is False
     assert (tmp_path / "prices.parquet").stat().st_mtime_ns == before
+
+
+def test_unfinished_last_day_from_yahoo_is_corrected_or_left_out(tmp_path, monkeypatch):
+    """18 Nov 2026: Yahoo gave the server a late-morning bar as the finished day (closes off by up to 2%, a quarter
+    of the volume). The newest day is checked against Alpaca's consolidated bars and corrected; without Alpaca it
+    is left out when its volume shows it was not finished. A file saved before the check is fixed on the next start."""
+    from src.ingest import live
+    days = pd.bdate_range("2026-10-20", "2026-11-18")
+    rows = []
+    for t in [f"S{i:02d}" for i in range(12)]:
+        for d in days:
+            rows.append({"ticker": t, "date": d, "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+                         "volume": 3e7 if d == days[-1] else 1e8, "adj_close": 100.0})   # last day: mid-morning bar
+    px = pd.DataFrame(rows)[live.COLS]
+    real = lambda tickers, day: {t: {"open": 100.0, "high": 103.0, "low": 98.0, "close": 102.5, "volume": 1.1e8}
+                                 for t in tickers}
+    fixed, note = live.verify_last_day(px, days[-1], real)
+    last = fixed[fixed["date"] == days[-1]]
+    assert (last["close"] == 102.5).all() and (last["adj_close"] == 102.5).all() and (last["volume"] == 1.1e8).all()
+    assert fixed[fixed["date"] < days[-1]].equals(px[px["date"] < days[-1]].astype({"volume": float}))   # earlier days untouched
+    assert "12 of 12 closes corrected" in note
+    ok = lambda tickers, day: {t: {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 3.1e7} for t in tickers}
+    assert live.verify_last_day(px, days[-1], ok)[0]["close"].eq(100.0).all()           # a finished, matching day stays
+    dropped, note = live.verify_last_day(px, days[-1], lambda tickers, day: {})          # no Alpaca: volume decides
+    assert dropped["date"].max() == days[-2] and "unfinished" in note
+    full = px.assign(volume=1e8)
+    assert live.verify_last_day(full, days[-1], lambda tickers, day: {})[0].equals(full)
+    # a file saved before the check existed is corrected once, on the next start
+    monkeypatch.setattr(live, "LIVE", tmp_path)
+    monkeypatch.setattr(live, "FILE", tmp_path / "prices.parquet")
+    px.to_parquet(tmp_path / "prices.parquet", index=False)
+    assert live.recheck(bars=real) is True
+    assert live.load().query("date == @days[-1]")["close"].eq(102.5).all()
+    assert live.recheck(bars=real) is False                                              # done once
+    assert alpaca_bars_parse_ok()
+
+
+def alpaca_bars_parse_ok():
+    from src.ingest import alpaca_live
+    alpaca_live.BUDGET = alpaca_live.Budget(150)
+    pages = {None: {"bars": {"BRK.B": [{"t": "2026-11-18T05:00:00Z", "o": 1, "h": 2, "l": 0.5, "c": 1.5, "v": 10}]},
+                    "next_page_token": "p2"},
+             "p2": {"bars": {"NVDA": [{"t": "2026-11-18T05:00:00Z", "o": 159.19, "h": 159.7, "l": 150.4, "c": 150.96, "v": 349791393}],
+                             "OLD": [{"t": "2026-11-17T05:00:00Z", "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}]}, "next_page_token": None}}
+    asked = []
+    def get(url, params, headers):
+        asked.append(params)
+        return pages[params.get("page_token")]
+    monkey = alpaca_live._headers
+    alpaca_live._headers = lambda: {}
+    try:
+        got = alpaca_live.daily_bars(["BRK-B", "NVDA", "OLD"], "2026-11-18", get=get)
+    finally:
+        alpaca_live._headers = monkey
+    return (set(got) == {"BRK-B", "NVDA"} and got["NVDA"]["close"] == 150.96 and asked[0]["feed"] == "sip"
+            and asked[0]["symbols"] == "BRK.B,NVDA,OLD" and len(asked) == 2)
 
 
 def test_todays_prices_are_only_the_day_after_the_last_close():

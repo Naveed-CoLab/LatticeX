@@ -12,11 +12,14 @@ data/
 │   ├── sec_events_latest.parquet  filings since then, refreshed daily by the dashboard
 │   ├── macro.parquet              FRED/ALFRED with release dates (tested, not used)
 │   ├── kronos_forecasts.parquet   Kronos forecasts (tested, not used)
-│   └── news_articles.parquet      Alpaca news headlines, 2015 on (in testing)
+│   ├── news_articles.parquet      Alpaca news headlines, 2015 on (tested, not added)
+│   └── news_scored.parquet        FinBERT tone of each article (tested, not added)
 └── live/       daily data for the dashboard and the daily model
     ├── prices.parquet             last 3 years of closing prices, replaced after every close
     ├── rank.json                  today's model ranking
     ├── forecasts/<day>.csv        every day's forecasts, kept as a record
+    ├── range_fit.json             fitted range model (copied to the server, so it is not refitted there)
+    ├── companies.json             SEC industry codes for the sector filter
     └── analysts/<TICKER>.json     analyst views, one stock at a time
 ```
 

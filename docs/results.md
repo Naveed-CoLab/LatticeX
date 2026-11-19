@@ -1,8 +1,8 @@
 # Results
 
-All results are walk-forward backtests on S&P 500 stocks, test years 2012–2024, scored weekly (~650 dates). The 2025–26 holdout has not been touched. Raw files: [`../results/`](../results/).
+All results are walk-forward backtests on S&P 500 stocks, test years 2012–2024, scored weekly (~650 dates). The 2025–26 holdout was used once, after the model was final (section 8). Raw files: [`../results/`](../results/).
 
-> **Which stock list each table uses.** Section 0 is measured on the **audited S&P 500 list, "universe v2"** (722 stocks, 14 Nov 2026). Every later section was measured earlier, on a list whose membership was frozen at January 2019 (bug in `build_universe.py`, see [`decisions.md`](decisions.md)); those tables are kept as the record of how the model was chosen. Price ranges are being re-run on universe v2.
+> **Which stock list each table uses.** Section 0 is measured on the **audited S&P 500 list, "universe v2"** (722 stocks, 14 Nov 2026). Sections 1–5c were measured earlier, on a list whose membership was frozen at January 2019 (bug in `build_universe.py`, see [`decisions.md`](decisions.md)); those tables are kept as the record of how the model was chosen. Sections 5d, 5e and 8 use universe v2.
 
 ## 0. v1.0 on universe v2 (14 Nov 2026) — final
 
@@ -304,6 +304,16 @@ v1.0 with and without the 8 news inputs (FinBERT tone of 767,435 Benzinga articl
 
 **Verdict.** News helps a little in the years with big news-driven moves (2020, 2021, 2023), but the gain is about twice the difference between two runs of the very same model and well short of the bar (paired t about 2, most years better at both horizons). At 20 days it is worse in 3 of 7 years. The top and bottom fifths do not improve. **v1.0 stays; news is not added.** By the rule set before the test, a stronger language model for sentiment is not tried either. The download, scoring and features stay in the code for a later retest with more years or a licensed feed.
 
+## 6. Single-feature ICs (2010–2024)
+
+All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), short-term reversal (`ret_5`, `ret_20` negative), free-cash-flow yield (+0.013), sector-relative momentum (+0.013), sector-relative earnings surprise (+0.011), accruals (−0.011). File: [`../results/factor_ic_2010_2024.csv`](../results/factor_ic_2010_2024.csv).
+
+## 7. Pending
+
+- ARIMA baseline
+- Volatility range model vs quantile XGBoost on universe v2 (interval score)
+- Crash risk, recovery, sector-neutral target on real data
+
 ## 8. Holdout 2025–26: the one-time final test (rules in `holdout-lock.md`, locked 17 Nov)
 
 ### 8a. Price ranges — pass (18 Nov 2026)
@@ -329,19 +339,11 @@ Range model v2 as in the product, fitted on windows that ended by 31 Dec 2024, s
 
 80% range held by quarter (v2): 5 days 70–84%, 20 days 68–89%, 60 days 70–86%. The weakest quarters were 2025 Q4 and 2026 Q1; the partial last quarter (2026 Q4, 619 forecasts at 20 days) held 50%.
 
-**Reading.** v2 passes every pre-set band, and its 2025–26 hit rates are close to its 2012–2024 replay (79.2% / 78.8% / 79.1%). Two honest points. First, v1 was better calibrated on the holdout (about 80% at every horizon) while v2 held 1.1 / 1.9 / 2.2 points under 80% (1.0 / 1.8 / 2.6 below v1), in exchange for ranges 3.1% / 5.3% / 7.7% narrower. Second, the main source of v2's shortfall is its upward tilt: it centres the range on the drift of 2001–2024, and in 2025–26 the close ended above the middle only 44.6% of the time at 60 days. By the lock's rules nothing is changed on the basis of this; it is recorded as the first thing to look at in a later version.
+**Reading.** v2 passes every pre-set band, and its 2025–26 hit rates are close to its 2012–2024 replay (79.3% / 79.0% / 79.1%). Two honest points. First, v1 was better calibrated on the holdout (about 80% at every horizon) while v2 held 1.1 / 1.9 / 2.2 points under 80% (1.0 / 1.8 / 2.6 below v1), in exchange for ranges 3.1% / 5.3% / 7.7% narrower. Second, the main source of v2's shortfall is its upward tilt: it centres the range on the drift of 2001–2024, and in 2025–26 the close ended above the middle only 44.6% of the time at 60 days. By the lock's rules nothing is changed on the basis of this; it is recorded as the first thing to look at in a later version.
 
 ### 8b. Ranking — running
 
-## 6. Single-feature ICs (2010–2024)
-
-All single features have |IC| ≤ 0.022. Strongest: book-to-market (−0.022), short-term reversal (`ret_5`, `ret_20` negative), free-cash-flow yield (+0.013), sector-relative momentum (+0.013), sector-relative earnings surprise (+0.011), accruals (−0.011). File: [`../results/factor_ic_2010_2024.csv`](../results/factor_ic_2010_2024.csv).
-
-## 7. Pending
-
-- ARIMA baseline
-- Volatility range model vs quantile XGBoost on universe v2 (interval score)
-- Crash risk, recovery, sector-neutral target on real data
+On Kaggle (`latticeiq-holdout-cpu`); the result goes here, against the pass marks in `holdout-lock.md` section 5, whatever it is.
 
 ## Limitations
 
